@@ -130,13 +130,9 @@ class MediumScatteringBase(Operator):
         self.kernel = compute_kernel(2*wave_number*radius, grid.shape)
         """The Lippmann-Schwinger kernel in Fourier space."""
 
-
         self.gmres_args = util.set_defaults(
             gmres_args, restart=10, rtol=1e-14, maxiter=100, atol=0.0
         )
-
-
-        
 
         # all attributes defined above are constants
         self._consts.update(self.attrs)
@@ -217,9 +213,6 @@ class MediumScatteringBase(Operator):
             contrast[self.support] += aux
         return contrast
 
-
-    
-
     def _gmres(self, op, rhs):
         result, info = spla.gmres(op, rhs.ravel(), **self.gmres_args)
         if info > 0:
@@ -241,8 +234,6 @@ class MediumScatteringBase(Operator):
         v = v.reshape(self.domain.shape)
         v = v + ifftn(np.conj(self.kernel) * fftn(np.conj(self._contrast) * v))
         return v.ravel()
-
-    
 
 
 # noinspection PyPep8Naming
