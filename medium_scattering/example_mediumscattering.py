@@ -1,4 +1,4 @@
-from examples.medium_scattering.mediumscattering import MediumScatteringFixed
+from mediumscattering import MediumScatteringFixed
 from regpy.operators import CoordinateProjection, CoordinateMask
 from regpy.hilbert import L2, HmDomain, Sobolev, HilbertPullBack
 from regpy.solvers import RegularizationSetting

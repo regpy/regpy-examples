@@ -16,12 +16,15 @@ class MediumScatteringBase(Operator):
 
     This is an abstract base class that computes the total field, but delegates
     farfield computation to subclasses, to allow implementing different
-    measurement geometries. Child classes need to set the `codomain` attribute
-    to the appropriate farfield space, and overwrite the `_compute_farfield` and
-    `_compute_farfield_adoint` methods.
+    measurement geometries. Child classes need to establish the `codomain` attribute
+    in the initialization to the appropriate farfield space and pass it to the 
+    super class, and overwrite the `_compute_farfield` and `_compute_farfield_adoint` 
+    methods.
 
     Parameters
     ----------
+    codomain : vecsps.VectorSpace
+        The codomain discribing the Farfield values. 
     gridshape : tuple
         Tuple determining the size of the grid on which the total field is
         computed. Should have 2 or 3 elements depending on the dimension of the
@@ -61,19 +64,26 @@ class MediumScatteringBase(Operator):
     and S.Xu, Kluwer, 2000.
     """
 
-    def __init__(self, gridshape, radius, wave_number, inc_directions,
+    def __init__(self, 
+                 codomain,
+                 gridshape, 
+                 radius, 
+                 wave_number, 
+                 inc_directions,
                  support=None,
                  gmres_args=None,
                  normalization='helmholtz'):
-        super().__init__()
-        assert len(gridshape) in (2, 3)
-        assert all(isinstance(s, int) for s in gridshape)
+
+        if len(gridshape) not in (2, 3):
+            raise ValueError(f"The grid shape has to be either 2 or 3, was given {gridshape}")
+        if any(not isinstance(s, int) for s in gridshape):
+            raise ValueError(f"Each dimensional shape has to be an integer, was given {(type(s) for s in gridshape)}")
         grid = vecsps.UniformGridFcts(
             *(np.linspace(-2*radius, 2*radius, s, endpoint=False)
               for s in gridshape),
             dtype=complex
         )
-        self.domain = grid
+        super().__init__(domain = grid, codomain=codomain)
 
         if support is None:
             support = (np.linalg.norm(grid.coords, axis=0) <= radius)
@@ -81,9 +91,10 @@ class MediumScatteringBase(Operator):
             support = np.asarray(support(grid, radius), dtype=bool)
         else:
             support = np.asarray(support, dtype=bool)
-        assert support.shape == grid.shape
-        assert (support <= (np.linalg.norm(grid.coords, axis=0) <= radius)).all()
-        """assert support is contained in radius"""
+        if support.shape != self.domain.shape:
+            raise RuntimeError(f"The constructed `support` has shape {support.shape} not matching the shape of the domain {self.domain.shape}")
+        if (support > (np.linalg.norm(self.domain.coords, axis=0) <= radius)).all():
+            raise RuntimeError(f"The constructed `support` lies outside the ball of `radius`.")
 
         self.support = support
         """Boolean array for the support constraint"""
@@ -92,16 +103,20 @@ class MediumScatteringBase(Operator):
         """The wave number of the incident waves"""
 
         inc_directions = np.asarray(inc_directions)
-        assert inc_directions.ndim == 2
-        assert inc_directions.shape[1] == grid.ndim
-        assert np.allclose(np.linalg.norm(inc_directions, axis=1), 1)
+        if inc_directions.ndim != 2:
+            raise ValueError(f"The incident directions have to be a two-dimensional array.")
+        if inc_directions.shape[1] != self.domain.ndim:
+            raise ValueError(f"The incident directions vectors are of dimension {inc_directions.shape[1]} mismatching the domain dimension of {self.domain.ndim}")
+        if not np.allclose(np.linalg.norm(inc_directions, axis=1), 1):
+            raise ValueError("The incident directions have to be normed vectors.")
 
         self.inc_directions = inc_directions
         """Array of incident directions"""
 
         self.inc_matrix = np.exp(1j * wave_number * (inc_directions @ grid.coords[:, support]))
 
-        assert normalization in {'helmholtz', 'schroedinger'}
+        if normalization not in {'helmholtz', 'schroedinger'}:
+            raise ValueError(f"`normalization` has be either `helmholtz` or `schroedinger` was given {normalization}.")
         self.normalization = normalization
         """The normalization"""
 
@@ -277,29 +292,59 @@ class MediumScatteringFixed(MediumScatteringBase):
     farfield_directions : array-like
         Array of measurement directions of the farfield, shape `(n, 2)` or `(n, 3)` depending on
         the problem dimension. All directions must be normalized.
+    gridshape : tuple, optional
+        Tuple determining the size of the grid on which the total field is
+        computed. Should have 2 or 3 elements depending on the dimension of the
+        problem. The domain always is taken to range from `-2*radius` to
+        `2*radius` along each axis. Default values is (64,64).
+    radius : float, optional
+        An a-priori estimate for the radius of a circle or sphere covering the
+        entire unknown object. Default value is 1.
+    wave_number : float, optional
+        The wave number of the incident waves. Default value is 1.
+    inc_directions : array-like, optional
+        Directions of the incident waves. Should be of shape `(n, 2)` or
+        `(n, 3)`, depending on the dimension. Each of the `n` directions needs
+        to be normalized. Default value is given by util.linspace_circle(16).
     **kwargs
         All other (keyword-only) arguments are passed to the base class, which
         see.
     """
 
-    def __init__(self, *, farfield_directions, **kwargs):
-        super().__init__(**kwargs)
-
+    def __init__(self, *, 
+            farfield_directions,
+            gridshape=(64, 64), 
+            radius=1,
+            wave_number=1, 
+            inc_directions = util.linspace_circle(16), 
+            **kwargs):
         farfield_directions = np.asarray(farfield_directions)
-        assert farfield_directions.ndim == 2
-        assert farfield_directions.shape[1] == self.domain.ndim
-        assert np.allclose(np.linalg.norm(farfield_directions, axis=-1), 1)
+        if farfield_directions.ndim != 2:
+            raise ValueError(f"Farfield has to be 2 dimensional array.")
+        if farfield_directions.shape[1] != len(gridshape):
+            raise ValueError(f"The dimension of each farfield direction has to match the gridshap dimension.")
+        if not np.allclose(np.linalg.norm(farfield_directions, axis=-1), 1):
+            raise ValueError(f"The farfield directions have to be normed vectors.")
         self.farfield_directions = farfield_directions
         """The farfield directions."""
+
+        codomain = vecsps.UniformGridFcts(
+            axisdata=(farfield_directions, inc_directions),
+            dtype=complex
+        )
+        super().__init__(
+            codomain,
+            gridshape, 
+            radius, 
+            wave_number, 
+            inc_directions, 
+            **kwargs
+        )
+
         self.farfield_matrix = self.normalization_factor * np.exp(
             -1j * self.wave_number * (farfield_directions @ self.domain.coords[:, self.support])
         )
         """The farfield matrix."""
-
-        self.codomain = vecsps.UniformGridFcts(
-            axisdata=(self.farfield_directions, self.inc_directions),
-            dtype=complex
-        )
 
     def _compute_farfield(self, farfield, inc_idx, v):
         farfield[:, inc_idx] = self.farfield_matrix @ v[self.support]
@@ -316,32 +361,65 @@ class MediumScatteringOneToMany(MediumScatteringBase):
     farfield_directions : array-like
         Array of measurement directions of the farfield, shape `(n_inc, n, 2)`, where `n_inc` is
         the number of incident directions. All directions must be normalized.
+    inc_directions : array-like,
+        Directions of the incident waves. Should be of shape `(n, 2)` or
+        `(n, 3)`, depending on the dimension. Each of the `n` directions needs
+        to be normalized.
+    gridshape : tuple, optional
+        Tuple determining the size of the grid on which the total field is
+        computed. Should have 2 or 3 elements depending on the dimension of the
+        problem. The domain always is taken to range from `-2*radius` to
+        `2*radius` along each axis. Default values is (64,64).
+    radius : float, optional
+        An a-priori estimate for the radius of a circle or sphere covering the
+        entire unknown object. Default value is 1.
+    wave_number : float, optional
+        The wave number of the incident waves. Default value is 1.
     **kwargs
         All other (keyword-only) arguments are passed to the base class, which
         see.
     """
 
-    def __init__(self, *, farfield_directions, **kwargs):
-        super().__init__(**kwargs)
-        assert self.domain.ndim == 2
+    def __init__(self, *, 
+            farfield_directions, 
+            inc_directions,
+            gridshape=(64, 64), 
+            radius=1,
+            wave_number=1,  
+            **kwargs):
 
         farfield_directions = np.asarray(farfield_directions)
-        assert farfield_directions.ndim == 3
-        assert farfield_directions.shape[0] == self.inc_directions.shape[0]
-        assert farfield_directions.shape[2] == self.domain.ndim
-        assert np.allclose(np.linalg.norm(farfield_directions, axis=-1), 1)
+        if farfield_directions.ndim != 3:
+            raise ValueError(f"`farfield_directions` has to be 3 dimensional array.")
+        if farfield_directions.shape[0] != inc_directions.shape[0]:
+            raise ValueError(f"The first dimension of the `farfield_directions` has to match the number of incedent directions.")
+        if farfield_directions.shape[2] != len(gridshape):
+            raise ValueError(f"The dimension of each farfield direction has to match the gridshap dimension.")
+        if not np.allclose(np.linalg.norm(farfield_directions, axis=-1), 1):
+            raise ValueError(f"The farfield directions have to be normed vectors.")
+
+        ninc, nfarfield = farfield_directions.shape[:2]
+        codomain = vecsps.VectorSpace(
+            shape=(nfarfield, ninc),
+            dtype=complex
+        )
+        super().__init__(
+            codomain,
+            gridshape, 
+            radius, 
+            wave_number, 
+            inc_directions, 
+            **kwargs
+        )
+
         self.farfield_directions = farfield_directions
-        """The farfield directions."""
+        """The farfield directions."""        
         self.farfield_matrix = self.normalization_factor * np.exp(
             -1j * self.wave_number * (farfield_directions @ self.domain.coords[:, self.support])
         )
         """The farfield matrix."""
 
-        ninc, nfarfield = farfield_directions.shape[:2]
-        self.codomain = vecsps.VectorSpace(
-            shape=(nfarfield, ninc),
-            dtype=complex
-        )
+        
 
     def _compute_farfield(self, farfield, inc_idx, v):
         farfield[:, inc_idx] = self.farfield_matrix[inc_idx] @ v[self.support]
