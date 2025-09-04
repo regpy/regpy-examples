@@ -4,7 +4,7 @@ import numpy as np
 from regpy.vecsps import DirectSum as DirectSumSpace 
 from regpy.operators import Identity, Operator, RealPart, ImaginaryPart
 from regpy.operators import PtwMultiplication, DirectSum, SquaredModulus, Exponential, Power
-from regpy.operators import VectorOfOperators, MatrixOfOperators, Adjoint 
+from regpy.operators import VectorOfOperators, MatrixOfOperators 
 from regpy.operators.parallel_operators import ParallelVectorOfOperators
 from regpy.operators.convolution import FresnelPropagator
 from scipy.special import jv
@@ -49,9 +49,9 @@ def get_wave_field_reco(domain, fresnel_number,mask,sol_type = None,parallel = F
             detection_op2*fresnel_prop2]
             ) * Exponential(domain) 
     if sol_type == 'phase':
-        return vec*Adjoint(ImaginaryPart(domain)) * mask
+        return vec*ImaginaryPart(domain).adjoint * mask
     elif sol_type == 'modulus':
-        return vec*Adjoint(RealPart(domain)) * mask
+        return vec*RealPart(domain).adjoint * mask
     else:
         return vec * mask
 
