@@ -1,3 +1,4 @@
+
 import os
 import sys
 
@@ -19,8 +20,9 @@ import matplotlib.gridspec as gridspec
 import matplotlib.animation as animation
 import time
 
-from x_ray_phase_contrast import ReIm, Corr, _build_fresnel_2, fresnel_prop, Ptw_Multiplication, Mat, Theta_2, Tau, Proj, Reshape, Real_to_complex
-from LowRank import HilbertSchmidtLowRank
+from auxiliary_ops import ReIm,  _build_fresnel_2, fresnel_prop, Ptw_Multiplication, Proj, Reshape, Real_to_complex
+from phaseless_passive_ip_ops import  Mat, Theta_2, Tau, Corr
+from low_rank_op_misfit_fct import HilbertSchmidtLowRank
 from create_Vcov import _create_Vcov
 
 import numpy as np
