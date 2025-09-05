@@ -13,7 +13,8 @@ from regpy.operators import SquaredModulus
 from regpy.functionals import QuadraticNonneg, QuadraticBilateralConstraints
 import matplotlib.pyplot as plt
 
-from x_ray_phase_contrast import summation, ReIm, fresnel_prop, Mat, Tau
+from auxiliary_ops import summation, ReIm, fresnel_prop
+from phaseless_passive_ip_ops import  Mat, Tau
 from create_Vcov import _create_Vcov
 
 import numpy as np
@@ -28,7 +29,7 @@ logging.basicConfig(
 N=256             # Pixel numbers
 N_frame=1000       # Number of frames ( or realizations)
 T=10**12            # the observation time or the number of photon counts
-fresnel_number=1e-3   # not properly scaled
+fresnel_number=10   # not properly scaled
 coherence_len = 0.3 # coherence length
 N_b=2             # denotes the rank of the matrix V
 Newton_steps =5    # Number of Newton updates

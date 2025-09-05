@@ -5,9 +5,9 @@ from regpy.operators import FourierTransform
 #defines the cut-off function, e.g., the bump function
 def cutoff_function_2d(x, y):
     xx,yy = np.meshgrid(x,y)
-    mask=((1-xx**2-yy**2)>0)
+    mask=((1-xx**2-yy**2)>0.01)
     func=np.zeros(xx.shape)
-    func[mask]=(np.exp(1)*np.exp(-1/(1-xx**2-yy**2)))[mask]
+    func[mask]=(np.exp(1)*np.exp(-1/(1-xx[mask]**2-yy[mask]**2)))
     return func
 
 def _create_Vcov(N, N_b, create_type='fourier_domain', sigma=None, xsample=None, ysample=None, coherence_len=None, grid=None):    
@@ -52,4 +52,4 @@ def _create_Vcov(N, N_b, create_type='fourier_domain', sigma=None, xsample=None,
     else:
         raise ValueError('No method specified')
         
-    return Vcov
+    return Vcov, S

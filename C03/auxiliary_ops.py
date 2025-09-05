@@ -152,16 +152,28 @@ class ReIm(Operator):
     def _adjoint(self, x):
         return self.Re.adjoint(x[0])+self.Im.adjoint(x[1])
 
-
 class summation(Operator):
-    
+
     def __init__(self, domain, codomain):
-        self.N=domain.shape[0]
-        self.N_b=domain.shape[-1]
+        sh = codomain.shape
+        assert domain.shape[:len(sh)] == sh
+        self.sum_axes = tuple(np.arange(len(sh),len(domain.shape)))
         super().__init__(domain, codomain, linear=True)
-        
+
     def _eval(self, x):
-        return np.sum(x.reshape(self.N, self.N, self.N_b**2), axis=-1)
+        return np.sum(x,axis=self.sum_axes)
     
     def _adjoint(self, y):
-        return self.domain.zeros()+y.reshape(self.N, self.N, 1, 1)
+        return np.broadcast_to(y[(...,)+(None,)*len(self.sum_axes)],self.domain.shape)
+#class summation(Operator):
+#    
+#    def __init__(self, domain, codomain):
+#        self.N=domain.shape[0]
+#        self.N_b=domain.shape[-1]
+#        super().__init__(domain, codomain, linear=True)
+#        
+#    def _eval(self, x):
+#        return np.sum(x.reshape(self.N, self.N, self.N_b**2), axis=-1)
+#    
+#    def _adjoint(self, y):
+#        return self.domain.zeros()+y.reshape(self.N, self.N, 1, 1)
