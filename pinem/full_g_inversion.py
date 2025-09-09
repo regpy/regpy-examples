@@ -1,25 +1,27 @@
 import logging
+import os
+from math import isfinite
+from copy import deepcopy
 
 import numpy as np
 from numpy.linalg import norm
-from math import isfinite
+import matplotlib.pyplot as plt
 from scipy.io import savemat
-from copy import deepcopy
+
 import regpy.stoprules as rules
 from regpy.vecsps import DirectSum
-from regpy.hilbert import L2, HmDomain
-from regpy.operators import CoordinateProjection, Zero, InnerShift, OuterShift
-from regpy.operators import DirectSum as opDirectSum
-from operators import get_op_g_to_data
+from regpy.hilbert import L2,Hm
 from regpy.solvers import RegularizationSetting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.solvers.nonlinear.newton import NewtonCG
-from plotting import plot_exact_solution_data,plot_reco, plot_stats, init_plot_stats
 from regpy.operators.parallel_operators import ParallelExecutionManager
+
+from operators import get_op_g_to_data
+from plotting import plot_exact_solution_data,plot_reco, plot_stats, init_plot_stats,ImShowFig
+
 from setup import setup_simulated_g
 from extensions import harmonic_extension
-import matplotlib.pyplot as plt
-import os
+
 
 ################################ set parameters 
 # intermediate results will be written to file names starting with output_prefix
@@ -31,7 +33,7 @@ output_prefix='example'
 # total number of counts for gain and loss data
 total_nr_counts = 2e9
 # turn off/on all plots
-do_plottings = True
+do_plottings = False
 # turn off/on saving of results
 save_results=False
 # use log(|g|) instead of |g| for darkness in phase plots of g and g_rec. Makes phase visible everywhere
@@ -62,15 +64,13 @@ max_Newton_its = 20
 
 ##############################ROUTINES FOR ERROR CALCULATION AND UPDATES OF STATS  
 
-def calc_reco_amp_phase(reco,extension,op_domain,mask_a):
+def calc_reco_amp_phase(reco,op_domain,mask_a):
     r"""Splits reconstructed data into amplitude and phase
 
     Parameters
     ----------
         reco : numpy.ndarray
             the reconstruction
-        extension : regpy.operators.Operator
-            extension operator
         op_domain : regpy.vecsps.VectorSpace
             domain of op
         mask_a : numpy.ndarray
@@ -83,10 +83,9 @@ def calc_reco_amp_phase(reco,extension,op_domain,mask_a):
         reco_phase : numpy.ndarray
             phase of reco
     """
-    ereco = extension(reco)
     # fix unidentified constant global phase 
-    _, ex_phase = op_domain.split(exact_solution)
-    reco_amp, reco_phase = op_domain.split(ereco)
+    ex_phase = exact_solution[-1]
+    reco_amp, reco_phase = reco
     reco_amp = np.exp(reco_amp)
     phase_correction = np.median(ex_phase[~mask_a])-np.median(reco_phase[~mask_a]) 
     reco_phase += phase_correction
@@ -117,7 +116,7 @@ def calc_reco_errors(reco_amp,reco_phase,exact_solution,op_domain):
     """
     def fnorm(arr):
         return norm(arr[:])
-    log_ex_amp, ex_phase = op_domain.split(exact_solution)
+    log_ex_amp, ex_phase = exact_solution
     ex_amp = np.exp(log_ex_amp)
     reco_error_amp = fnorm(reco_amp-ex_amp)/fnorm(ex_amp)
     reco_error_phase = fnorm(np.exp(1j*reco_phase)-np.exp(1j*ex_phase))/np.sqrt(np.prod(ex_phase.shape))
@@ -169,34 +168,19 @@ if __name__ == '__main__':
 
         ########################INITIALIZE FORWARD OPERATOR
 
+        op, grid, exact_solution, g_map, mask_a, mask_p, opdata = setup_simulated_g(N=N_data,parallel=False)
         if mask_a.any():
             prior_ampl = harmonic_extension(~mask_a,np.log(np.abs(g_map)),damping =0)
-            ampl_proj = CoordinateProjection(grid, mask_a)
-            ampl_domain = HmDomain(grid.real_space(),mask_a, index = sobolev_index_ampl)
+            ampl_domain = Hm(grid,mask = mask_a, index = sobolev_index_ampl)
         else: # amplitude is known everywhere
             prior_ampl = np.log(np.abs(g_map))
-            ampl_proj = Zero(grid)
             ampl_domain = L2(grid) # only needed formally
 
-        ampl_projection = InnerShift(ampl_proj,prior_ampl)
-        ampl_extension = OuterShift(ampl_proj.adjoint,prior_ampl)
 
-        # outer boundary values of phase must also be fixed for use of Sobolev norm
-        prior_phase = np.unwrap(np.angle(g_map.T)).T
-        phase_proj = CoordinateProjection(grid, mask_p)
-        phase_projection = InnerShift(phase_proj,prior_phase)
-        phase_extension = OuterShift(phase_proj.adjoint,prior_phase)
         weight = (0.02+np.exp(prior_ampl)/np.exp(np.max(prior_ampl)))
-        phase_domain = HmDomain(grid.real_space(),mask_p, index = sobolev_index_phase, weight = weight)
 
-        h_domain = ampl_domain + phase_domain
-        projection =  opDirectSum(ampl_projection, phase_projection)
-        extension = opDirectSum(ampl_extension,phase_extension)
-
-        # as extension is also needed for plotting, a copy is required to avoid errors 
-        # on the use of revoked copies 
-        extension2 = deepcopy(extension)
-        op_ext = op * extension2
+        phase_domain = Hm(grid,mask = mask_p, index = sobolev_index_phase, weight = weight)
+        h_domain = ampl_domain + phase_domain    
 
         ############COMPUTE SYNTHETIC DATA
         # generated by simulation, i.e. application of the forward operator to g and adding poisson noise.
@@ -204,21 +188,20 @@ if __name__ == '__main__':
         exact_data = op(exact_solution)
         if isfinite(total_nr_counts):
             scal = np.sum(exact_data)/total_nr_counts
-            data = scal*np.random.poisson(exact_data/scal)
+            data = scal*op.codomain.poisson(exact_data/scal)
         else:
             data = exact_data
             scal =1
-        data_comp = op.codomain.split(data)
         if output_path:
             savemat(output_path+'_data.mat',{'data':data})
 
 
         #############DEFINE REGULARIZATION SETTING
         # define codomain Gram matrix based on observed data to approximate log-likelihood
-        h_codomain = L2(grid, weights=1/(scal**2+scal*data_comp[0])) 
-        for j in range(1, len(data_comp)):
-            h_codomain = h_codomain + L2(grid, weights=1/(scal**2 + scal*data_comp[j]))
-
+        h_codomain = L2(weights=1/(scal**2+scal*data[0])) 
+        for data_i in data[1:]:
+            h_codomain +=  L2(weights=1/(scal**2 + scal*data_i))
+        setting = RegularizationSetting(op=op, penalty=h_domain, data_fid=h_codomain)
 
         ##################### DEFINE INITIAL GUESS
         # the initial guess is constructed from initial 
@@ -227,16 +210,16 @@ if __name__ == '__main__':
         X, Y = np.meshgrid(np.linspace(0, 1, np.size(mask_a, 1)), np.linspace(0, 1, np.size(mask_a, 0)))
         init_phase = -1 * (np.sin(angle)*X + np.cos(angle)*Y) * 2*np.pi * 3 + 2.5
         init_vec = op.domain.join(prior_ampl,init_phase)
-        init_vec_proj = projection(init_vec)
+        init_vec_proj = init_vec
 
         ############################### INITIALIZE STOPPING RULE
 
-        sqrtdata = np.sqrt(scal*data) 
+        sqrtdata = (scal*data).component_wise(np.sqrt)
 
         discrepancy_rule = rules.Discrepancy(
-                h_codomain.norm,
+                setting.h_codomain.norm,
                 data,
-                noiselevel= h_codomain.norm(sqrtdata),
+                noiselevel= setting.h_codomain.norm(sqrtdata),
                 tau=1
             )
         stoprule = (discrepancy_rule + rules.CountIterations(max_iterations=max_Newton_its,while_type=True))
@@ -244,10 +227,9 @@ if __name__ == '__main__':
 
         ########################################## PERFORM INVERSION
 
-        setting = RegularizationSetting(op=op_ext, penalty=h_domain, data_fid=h_codomain)
         if N_deriv:
             N_current = N_deriv[0]
-            op_simple = get_op_g_to_data(*opdata, N=N_current) * deepcopy(extension)
+            op_simple = get_op_g_to_data(*opdata, N=N_current)
         else:
             N_current = N_data
             op_simple = None
@@ -266,7 +248,7 @@ if __name__ == '__main__':
                 simplified_op = op_simple
                 )
 
-        fig1,fig2 = plot_exact_solution_data(g_map,data_comp,plot_log_g = plot_log_g)       
+        fig1,fig2 = plot_exact_solution_data(g_map,data,plot_log_g = plot_log_g)       
         fig3, axs3 = init_plot_stats()
 
         stats = {'ampl_err': [], 'phase_err': [], 'complex_err': [], 'residuals': [], 'nr_inner_steps': [], \
@@ -274,19 +256,19 @@ if __name__ == '__main__':
         newton_step=0
 
         def update_and_plot(newton_step,reco,reco_data):
-            reco_amp,reco_phase=calc_reco_amp_phase(reco,extension,op.domain,mask_a)
+            reco_amp,reco_phase=calc_reco_amp_phase(reco,op.domain,mask_a)
             reco_errors=calc_reco_errors(reco_amp,reco_phase,exact_solution,op.domain)
             residual=calc_residual(reco_data,data,setting)
             update_stats(reco_errors,residual,newton_step,stats,N_current)
             reco_data_comp = flat_codomain.split(reco_data)
             ex_data_comp = flat_codomain.split(data)
             if(do_plottings):
+                fig1 = ImShowFig(3,3) 
+                fig2 = ImShowFig(3,2)    
+                fig3, axs3 = plt.subplots(1,3)
                 plot_reco(fig1,fig2,reco_amp,reco_phase,reco_data_comp,g_map,ex_data_comp,newton_step,mask_a = mask_a)
-                plot_stats(axs3,stats,plot_inner_its = hasattr(solver, "nr_inner_its") and callable(solver.nr_inner_its))
-            if output_path:
-                savemat(output_path+'{}.mat'.format(newton_step),
-                {'reco_amp':reco_amp, 'reco_phase': reco_phase, **stats}
-                )
+                plot_stats(axs3,stats)
+
 
         update_and_plot(newton_step,solver.x,solver.y)   
         for newton_step, [reco, reco_data] in enumerate(solver.while_(stoprule),1):
@@ -296,7 +278,8 @@ if __name__ == '__main__':
 
         for N_current in N_deriv[1:]:
             residual_last_N= stats['residuals'][-1]
-            op_simple = get_op_g_to_data(*opdata, N=N_current) * deepcopy(extension)
+            del op_simple
+            op_simple = get_op_g_to_data(*opdata, N=N_current) 
             if use_NewtonCG:
                 solver = NewtonCG(
                     setting, data, init=stoprule.x,

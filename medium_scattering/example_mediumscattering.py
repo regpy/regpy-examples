@@ -1,8 +1,7 @@
 from mediumscattering import MediumScatteringFixed
-from regpy.operators import CoordinateProjection, CoordinateMask
-from regpy.hilbert import L2, HmDomain, Sobolev, HilbertPullBack
+from regpy.hilbert import L2,Hm
 from regpy.solvers import RegularizationSetting
-from regpy.solvers.nonlinear.irgnm import IrgnmCG
+from regpy.solvers.nonlinear import IrgnmCG
 import regpy.stoprules as rules
 import regpy.util as util
 
@@ -18,8 +17,10 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(name)-20s :: %(message)s'
 )
 
+import regpy.util as util
+# building the forward  operator
 radius = 1
-scattering = MediumScatteringFixed(
+op = MediumScatteringFixed(
     gridshape=(64, 64),
     radius=radius,
     wave_number=1,
@@ -27,33 +28,25 @@ scattering = MediumScatteringFixed(
     farfield_directions=util.linspace_circle(16),
 )
 
-contrast = scattering.domain.zeros()
-r = np.linalg.norm(scattering.domain.coords, axis=0)
-contrast[r < radius] = np.exp(-1/(radius - r[r < radius]**2))
 
-projection = CoordinateProjection(
-    scattering.domain,
-    scattering.support
-)
-embedding = projection.adjoint
+exact_solution = op.domain.zeros()
+r = np.linalg.norm(op.domain.coords, axis=0)
+exact_solution[r < radius] = np.exp(-1/(radius - r[r < radius]**2))
 
-op = scattering * embedding
-
-exact_solution = projection(contrast)
 exact_data = op(exact_solution)
-noise = 0.01 * op.codomain.randn()
+# create and add noise
+noise = 0.005 * op.codomain.randn()
 data = exact_data + noise
-init = op.domain.zeros()
 
-myh_domain = HmDomain(scattering.domain,scattering.support,dtype=complex,index=2)
 setting = RegularizationSetting(
     op=op,
     # Define Sobolev norm on support via embedding
-    #h_domain=HilbertPullBack(Sobolev(index=2), embedding, inverse='cholesky'),
-    penalty = myh_domain, 
-    data_fid =L2
+    penalty = Hm(mask=op.support,dtype=complex,index=2), 
+    data_fid=L2
 )
 
+init = op.domain.zeros()
+#set up solver
 solver = IrgnmCG(
     setting, data,
     regpar=0.0001, regpar_step=0.8,
@@ -64,12 +57,13 @@ solver = IrgnmCG(
         reltoly=1e-8
     )
 )
+#set up stopping creiteria
 stoprule = (
     rules.CountIterations(100) +
     rules.Discrepancy(
         setting.h_codomain.norm, data,
         noiselevel=setting.h_codomain.norm(noise),
-        tau=1.1
+        tau=2.1
     )
 )
 
@@ -88,13 +82,12 @@ def show(i, j, x):
     bars[i, j].clear()
     fig.colorbar(im, cax=bars[i, j])
 
-show(0, 0, np.abs(contrast))
+show(0, 0, np.abs(exact_solution))
 show(1, 0, np.abs(exact_data))
 for reco, reco_data in solver.until(stoprule):
-    solution = embedding(reco)
-    show(0, 1, np.abs(solution))
+    show(0, 1, np.abs(reco))
     show(1, 1, np.abs(reco_data))
-    show(0, 2, np.abs(solution - contrast))
+    show(0, 2, np.abs(reco - exact_solution))
     show(1, 2, np.abs(exact_data - reco_data))
     plt.pause(0.5)
 

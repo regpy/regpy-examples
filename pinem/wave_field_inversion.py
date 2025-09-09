@@ -2,7 +2,7 @@ from regpy.solvers.nonlinear.irgnm import IrgnmCG
 
 from regpy.operators import CoordinateProjection
 from operators import get_wave_field_reco
-from regpy.hilbert import L2, HmDomain
+from regpy.hilbert import L2, Hm
 from regpy.vecsps import UniformGridFcts
 from regpy.solvers import RegularizationSetting
 import regpy.stoprules as rules
@@ -47,13 +47,10 @@ mask = mask | (abs((Xco-0.35)*(Xco-0.35)+(Yco-0.35)*(Yco-0.35)) <= 0.01)
 op = get_wave_field_reco(cgrid, fresnel_number, mask.astype(float), sol_type,parallel=False)  
 
 if sol_type == None:
-    projection = CoordinateProjection(cgrid,mask)
-    h_domain =  HmDomain(cgrid,mask,dtype=complex,index=1)
+    h_domain =  Hm(cgrid,mask,dtype=complex,index=1)
 else:
-    projection = CoordinateProjection(grid,mask)
-    h_domain = HmDomain(grid,mask,index=1)
-embedding = projection.adjoint
-op = op*embedding
+    h_domain = Hm(grid,mask,index=1)
+op = op
 
 # Create phantom image (= padded example-image)
 picture = ascent()
@@ -67,7 +64,7 @@ exact_solution = np.pad(exact_solution, pad_amount, 'constant', constant_values=
 exact_solution = exact_solution * mask  # - 4*(1-mask)
 
 # Create exact data and Poisson data
-exact_data = op(projection(exact_solution))
+exact_data = op(exact_solution)
 data = np.random.poisson(intensity * exact_data)/intensity
 
 # define codomain Gram matrix based on observed data to approximate log-likelihood
@@ -79,7 +76,7 @@ h_codomain = h_codomain0+h_codomain1+h_codomain2
 # Image reconstruction using the IRGNM method
 setting = RegularizationSetting(op=op,penalty=h_domain,data_fid=h_codomain)
 
-init_vec = np.zeros_like(projection(exact_solution))
+init_vec = np.zeros_like(exact_solution)
 
 solver = IrgnmCG(
     setting, data, regpar=0.1, regpar_step=2/3, init=init_vec,
@@ -115,8 +112,7 @@ for j in range(len(data_comp)):
 # perform reconstruction    
 for reco, reco_data in solver.until(stoprule):
     newton_step = solver.iteration_step_nr
-    ereco = embedding(reco)
-    reco_error = ereco-exact_solution
+    reco_error = reco-exact_solution
     print('rel. reconstruction errors step {}: modulus: {:1.4f}, phase: {:1.4f}'.format(
         newton_step,
         np.linalg.norm(reco_error.real)/np.linalg.norm(exact_solution.real),
@@ -124,11 +120,11 @@ for reco, reco_data in solver.until(stoprule):
     # Plot results
     if newton_step % 5 == 0 or stoprule.triggered:
         axs[1, 0].set_title('Reco abs, step {}'.format(newton_step))
-        im = axs[1, 0].imshow(np.abs(ereco), interpolation='nearest')
+        im = axs[1, 0].imshow(np.abs(reco), interpolation='nearest')
         if newton_step == 5:
             fig.colorbar(im, ax=axs[1, 0])
         axs[1, 1].set_title('Reco phase, step {}'.format(newton_step))
-        im = axs[1, 1].imshow(np.angle(ereco), cmap='twilight', interpolation='nearest')
+        im = axs[1, 1].imshow(np.angle(reco), cmap='twilight', interpolation='nearest')
         if newton_step == 5:
             fig.colorbar(im, ax=axs[1, 1])
 

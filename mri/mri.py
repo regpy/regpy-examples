@@ -150,7 +150,7 @@ def full_parallel_mri_parallelized(grid,ncoils,mask,centered=False):
         ops.append(sampling*ft*cmult)
         distribution_mat[i,i+1]=True
         domain+=cmult.domain[1]
-    return DistributedVectorOfOperators(ops,domain,distribution_mat)
+    return DistributedVectorOfOperators(ops,domain=domain,distribution_mat=distribution_mat)
 
 
 def sobolev_smoother(codomain, sobolev_index, factor=None, centered=False):
