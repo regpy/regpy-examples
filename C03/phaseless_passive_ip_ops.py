@@ -83,7 +83,7 @@ class MatrixProductOp(Operator):
         DE:  numpy array with first dimension =2: D=DE[0,:] and E=DE[1,:] 
         ndim_cols :  integer [default 1] number of dimensions of the domain of D,E as linear mappings
     Output: matrix product
-        D @ E^T, a tensor of shape shape_col+shape_col
+        D @ E^*, a tensor of shape shape_col+shape_col
     This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
     the product of the other dimensions.
     _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
@@ -114,7 +114,13 @@ class MatrixProductOp(Operator):
         # (sums over the "column axes" of A and B, which are assumed to be the last ones both in A and B)
         ax = [np.arange(-self.ndim_col,0,1),np.arange(-self.ndim_col,0,1)]  
         return np.tensordot(A,B,ax)
-    
+
+    def prod_A_B(self,A,B):
+        # returns matrix product A * B 
+        # (sums over the "column axes" of A and B, which are assumed to be the last ones in A and the first ones in B)
+        ax = [np.arange(-self.ndim_col,0,1),np.arange(0,self.ndim_col,1)]  
+        return np.tensordot(A,B,ax)
+ 
     def prod_GT_A(self,G,A):
         # returns matrix product G^T * A 
         # (sums over "row axes", which are assumed to be the first ones both in G and A)
@@ -143,8 +149,8 @@ class MatrixProductOp(Operator):
 
     def _eval_adjoint(self, DE):
         self.DE = DE
-        return np.stack((self.prod_G_A(DE[0], self.prod_GT_A(DE[1],DE[1])),
-                        self.prod_G_A(DE[1], self.prod_GT_A(DE[0],DE[0]))),
+        return np.stack((self.prod_A_B(DE[0], self.prod_GT_A(DE[1],DE[1])),
+                        self.prod_A_B(DE[1], self.prod_GT_A(DE[0],DE[0]))),
                         axis=0)
 
     def _deriv_adjoint(self, dDE):
@@ -153,7 +159,7 @@ class MatrixProductOp(Operator):
                         self.prod_G_A(self.DE[1], self.prod_GT_A(dDE[0],self.DE[0])) 
                       + self.prod_G_A(dDE[1],  self.proj_GT_A(self.DE[0],self.DE[0])),
                         axis=0)
- 
+
 class Theta:
     
     """Implements the standard matrix product DxE -> D E^* as an operator. 
