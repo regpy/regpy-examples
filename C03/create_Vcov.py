@@ -1,5 +1,4 @@
 import numpy as np
-#from x_ray_phase_contrast import Corr, _build_fresnel_2, fresnel_prop, Ptw_Multiplication, Mat, Theta, Tau, Proj
 from regpy.operators import FourierTransform
 
 #defines the cut-off function, e.g., the bump function

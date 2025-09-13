@@ -74,16 +74,135 @@ class Tau(Operator):
         first_adj=np.sum(C*self.A.conj().reshape(self.N, self.N, self.k, 1), axis=-2).conj()
         return first_adj+second_adj
         
-class MatrixProductOp(Operator):
+class MatrixAutoProductOp(Operator):
+    """Operator mapping a rectangluar matrix E to the matrix product E*E^*.
+    E may be represent mapping from a tensor space of shape shape_columns to a tensor 
+    space of shape shape_rows such that E is a tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
+    Input:
+        E:  numpy array  
+        ndim_cols :  integer [default 1] number of dimensions of the domain of E as linear mapping
+    Output: matrix product
+        E @ E^*, a tensor of shape shape_rows+shape_columns
+    This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
+    the product of the other dimensions.
+    _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
+    """
     
-    """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the matrix product D*E^*.
+    def __init__(self, MatrixSpace,ndim_col=1):
+        if not isinstance(MatrixSpace,VectorSpace):
+            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace1}')
+        else:
+            self.shape = MatrixSpace.shape
+            dtype = MatrixSpace.dtype
+        if not isinstance(ndim_col,int):
+            raise TypeError('ndim_col must be integer.')
+            self.s = s
+        self.ndim_col = ndim_col
+        self.ndim_row = len(self.shape) - ndim_col
+        self.shape_columns = self.shape[:-ndim_col]
+        self.shape_rows = self.shape[-ndim_col:]
+
+        shape_domain = self.shape
+        shape_codomain = self.shape_columns*2      
+        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
+                         VectorSpace(shape_codomain,dtype=dtype), 
+                         linear=False)
+
+    def prod_A_Bs(self,A,B):
+        # returns matrix product A * B^* 
+        # (sums over the "column axes" of A and B, which are assumed to be the last ones both in A and B)
+        ax = [np.arange(-self.ndim_col,0,1),np.arange(-self.ndim_col,0,1)]  
+        return np.tensordot(A,np.conj(B),ax)
+
+    def prod_A_B(self,A,B):
+        # returns matrix product A * B 
+        # (sums over the "column axes" of A and B, which are assumed to be the last ones in A and the first ones in B)
+        ax = [np.arange(-self.ndim_col,0,1),np.arange(0,self.ndim_col,1)]  
+        return np.tensordot(A,B,ax)
+ 
+    def prod_G_A(self,G,A):
+        # returns matrix product G * A 
+        # (sums over "row axes", which are assumed to be the last ones in G and the first ones A)
+        ax = [np.arange(-self.ndim_row,0,1),np.arange(0,self.ndim_row)]
+        return np.tensordot(G,A,ax)
+    
+    def prod_As_G(self,A,G):
+        # returns matrix product A^* * G 
+        # (sums over "row axes", which are assumed to be the first ones both in G and A)
+        ax = [np.arange(0,self.ndim_row),np.arange(0,self.ndim_row)]
+        return np.tensordot(np.conj(A),G,ax)
+
+    def _eval(self, E, differentiate=False, adjoint_derivative=True):
+        if differentiate==True:
+            self.E = E
+        return self.prod_A_Bs(E,E)
+
+    def _derivative(self, dE):
+        return self.prod_A_Bs(self.E,dE) + self.prod_A_Bs(dE,self.E)
+
+    def _adjoint(self, G):
+        return self.prod_G_A(G,self.E) + self.prod_As_G(G,self.E)
+
+    def _adjoint_eval(self, E):
+        self.E = E
+        return 2*self.prod_A_B(E, self.prod_As_G(E,E)) 
+
+    def _adjoint_deriv(self, dE):
+        return 2*(self.prod_A_B(self.E), self.prod_As_G(dE,self.E) 
+                  +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
+
+class DiagMatrixAutoProductOp(Operator):
+    """Operator mapping a rectangluar matrices E to the diagonal of the matrix product E*E^*.
+    E may be represent a mapping from a tensor space of shape shape_columns to a tensor 
+    space of shape shape_rows such that E is a tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
+    Input:
+        E:  numpy array 
+        ndim_cols :  integer [default 1] number of dimensions of the domain of E as linear mapping
+    Output: 
+        diag(E @ E^*), a tensor of shape shape_col
+    """    
+
+    def __init__(self, MatrixSpace,ndim_col=1):
+        if not isinstance(MatrixSpace,VectorSpace):
+            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace}')
+        else:
+            self.shape = MatrixSpace.shape
+            dtype = MatrixSpace.dtype
+        if not isinstance(ndim_col,int):
+            raise TypeError('ndim_col must be integer.')
+            self.s = s
+        self.ndim_col = ndim_col
+        self.ndim_row = len(self.shape) - ndim_col
+        self.shape_columns = self.shape[:-ndim_col]
+        self.shape_rows = self.shape[-ndim_col:]
+        self.sum_ax = tuple(np.arange(-self.ndim_col,0,1))
+
+        shape_domain = self.shape
+        shape_codomain = self.shape_columns      
+        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
+                         VectorSpace(shape_codomain,dtype=float), 
+                         linear=False)
+
+    def _eval(self, E, differentiate=False):
+        if differentiate==True:
+            self.E = E
+        return np.sum(np.real(E*E.conj()),axis=self.sum_ax)
+    
+    def _derivative(self, dE):
+        return 2*(np.sum(self.E.real*dE.real,axis=self.sum_ax)+np.sum(dE.imag*self.E.imag,axis=self.sum_ax))
+
+    def _adjoint(self,G):
+        return 2*(G[(...,) + (None,)*self.ndim_col]*self.E)
+
+class MatrixProductOp(Operator):  
+    """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the matrix product D*E^T.
     D and E may be represent mapping from a tensor space of shape shape_columns to a tensor 
     space of shape shape_rows such that D and E are tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
     Input:
         DE:  numpy array with first dimension =2: D=DE[0,:] and E=DE[1,:] 
         ndim_cols :  integer [default 1] number of dimensions of the domain of D,E as linear mappings
     Output: matrix product
-        D @ E^*, a tensor of shape shape_col+shape_col
+        D @ E^T, a tensor of shape shape_col+shape_col
     This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
     the product of the other dimensions.
     _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
@@ -133,33 +252,85 @@ class MatrixProductOp(Operator):
         ax = [np.arange(-self.ndim_row,0,1),np.arange(0,self.ndim_row)]      
         return np.tensordot(G,A,ax)
 
-    def _eval(self, DE, differentiate=False, adjoint_derivative=True):
+    def _eval(self, DE, differentiate=False):
         if differentiate==True:
-            self.DE = DE
-        return self.prod_A_BT(DE[0],DE[1])
+            self.D = DE[0]
+            self.E = DE[1]
+        return self.prod_A_BT(self.D,self.E)
 
     def _derivative(self, dDE):
-        return (self.prod_A_BT(self.DE[0],dDE[1]) 
-              + self.prod_A_BT(dDE[0],    self.DE[1]))
+        return (self.prod_A_BT(self.D,dDE[1]) 
+              + self.prod_A_BT(dDE[0],self.E))
 
     def _adjoint(self, G):
-        return np.stack((self.prod_G_A(G,self.DE[1]),
-                        self.prod_GT_A(G,self.DE[0])),
+        return np.stack((self.prod_G_A(G,np.conj(self.E)),
+                        self.prod_GT_A(G,np.conj(self.D))),
                         axis=0)
 
-    def _eval_adjoint(self, DE):
-        self.DE = DE
-        return np.stack((self.prod_A_B(DE[0], self.prod_GT_A(DE[1],DE[1])),
-                        self.prod_A_B(DE[1], self.prod_GT_A(DE[0],DE[0]))),
+    def _adjoint_eval(self, DE):
+        self.D = DE[0]
+        self.E = DE[1]
+        return np.stack((self.prod_A_B(np.conj(self.D), self.prod_GT_A(DE[1],DE[1])),
+                        self.prod_A_B(np.conj(self.E), self.prod_GT_A(DE[0],DE[0]))),
                         axis=0)
 
-    def _deriv_adjoint(self, dDE):
-        return np.stack(self.prod_G_A(self.DE[0], self.prod_GT_A(dDE[1],self.DE[1])) 
-                      + self.prod_G_A(dDE[0],  self.proj_GT_A(self.DE[1],self.DE[1])),
-                        self.prod_G_A(self.DE[1], self.prod_GT_A(dDE[0],self.DE[0])) 
-                      + self.prod_G_A(dDE[1],  self.proj_GT_A(self.DE[0],self.DE[0])),
+    def _adjoint_deriv(self, dDE):
+        return np.stack(self.prod_A_B(self.D, self.prod_GT_A(dDE[1],np.conj(self.E))) 
+                      + self.prod_A_B(dDE[0],  self.proj_GT_A(self.E,np.conj(self.E))),
+                        self.prod_A_B(self.E, self.prod_GT_A(dDE[0],np.conj(self.D))) 
+                      + self.prod_A_B(dDE[1],  self.proj_GT_A(self.D,np.conj(self.D))),
                         axis=0)
 
+class DiagMatrixProductOp(Operator):
+    """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the diagonal of the matrix product D*E^*.
+    D and E may be represent mapping from a tensor space of shape shape_columns to a tensor 
+    space of shape shape_rows such that D and E are tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
+    Input:
+        DE:  numpy array with first dimension =2: D=DE[0,:] and E=DE[1,:] 
+        ndim_cols :  integer [default 1] number of dimensions of the domain of D,E as linear mappings
+    Output: matrix product
+        D @ E^*, a tensor of shape shape_col+shape_col
+    This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
+    the product of the other dimensions.
+    _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
+    """    
+
+    def __init__(self, MatrixSpace,ndim_col=1):
+        if not isinstance(MatrixSpace,VectorSpace):
+            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace}')
+        else:
+            self.shape = MatrixSpace.shape
+            dtype = MatrixSpace.dtype
+        if not isinstance(ndim_col,int):
+            raise TypeError('ndim_col must be integer.')
+            self.s = s
+        self.ndim_col = ndim_col
+        self.ndim_row = len(self.shape) - ndim_col
+        self.shape_columns = self.shape[:-ndim_col]
+        self.shape_rows = self.shape[-ndim_col:]
+        self.sum_ax = tuple(np.arange(-self.ndim_col,0,1))
+
+        shape_domain = (2,)+self.shape
+        shape_codomain = self.shape_columns      
+        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
+                         VectorSpace(shape_codomain,dtype=dtype), 
+                         linear=False)
+
+    def _eval(self, DE, differentiate=False):
+        if differentiate==True:
+            self.D = DE[0]
+            self.E = DE[1]
+        return np.sum(DE[0]*DE[1],axis=self.sum_ax)
+    
+    def _derivative(self, dDE):
+        return (np.sum(self.D*dDE[1],axis=self.sum_ax) 
+              + np.sum(self.E*dDE[0],axis=self.sum_ax))
+    
+    def _adjoint(self,G):
+        return np.stack((G[(...,) + (None,)*self.ndim_col]*np.conj(self.E),
+                         G[(...,) + (None,)*self.ndim_col]*np.conj(self.D)),
+                        axis=0)
+    
 class Theta:
     
     """Implements the standard matrix product DxE -> D E^* as an operator. 
