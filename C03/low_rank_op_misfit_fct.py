@@ -49,8 +49,6 @@ class HilbertSchmidtLowRank(Functional):
         assert domain.summands[1].shape == self.sdomain.shape
         self.cshape = self.sdomain.shape[:-1]
         super().__init__(domain)
-        print(self.cshape)
-        print(data[0].shape)
         for dat in data:
             assert dat.shape==self.cshape or dat.shape[:-1]==self.cshape
         self.data = data

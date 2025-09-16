@@ -45,35 +45,53 @@ class Corr(Operator):
             
 class Tau(Operator):
     
-    """This operator allows to rewrite the pointwise squared modulus of a 
-    low rank operator as a matrix product of two low rank matrices. 
-    The factor matrices are written as 3-tensors and their rank as matrices is 
-    the square of the rank of the product matrix. This operator maps a matrix 
-    to the corresponding rank-3-tensor
+    """This operator allows to rewrite the elementwise squared modulus  |A|^2 of a 
+    complex low rank matrix A as a matrix product of two low rank matrices:
+           |A|^2 = Tau(A) * Tau(A)^* 
+    The linear mapping corresponding to A may be a mapping from tensor spaces 
+    of shapes shape_rows and shape_cols such that A is a tensor of shape shape_rows + shape_cols.
+    Then Tau(A) has shape shape_rows + shape_cols*2.
 
-        Mapping of (A_{ij})_{i,j} -> (A_{ip} A^*_{iq})_{i,p,q} 
+    Initialization:
+        domain: complex VectorSpace of shape shape_cols
+        codomain: complex VectorSpace of shape shape_rows
+    Input: 
+        A: complex numpy array of shape shape_rows+shape_cols
+    Output:
+        Tau(A): complex numpy array of shape shape_rows+shape_cols*2 given by 
+            Tau(A)[i,p,q] = A[i,p] * np.conj(A[i,q]) for i in shape_rows, p,q in shape_cols
     """
     
     def __init__(self, domain, codomain):
-        self.N=domain.shape[0]
-        self.k=domain.shape[-1]
-        super().__init__(domain, codomain, linear=False)
+        if not domain.dtype == complex:
+            raise ValueError('domain must be complex')
+        if not codomain.dtype == complex:
+            raise ValueError('codomain must be complex')         
+        self.shape_cols=domain.shape
+        self.ncol = len(self.shape_cols)
+        self.shape_rows=codomain.shape
+        self.nrow = len(self.shape_rows)
+        self.aux_shape = self.shape_rows + (1,)*len(self.shape_cols) + self.shape_cols
+        super().__init__(domain=VectorSpace(shape=self.shape_rows+self.shape_cols,dtype=complex),
+                         codomain=VectorSpace(shape=self.shape_rows+self.shape_cols*2,dtype=complex),
+                         linear=False)
         
     def _eval(self, A, differentiate=True):
         if differentiate:
             self.A=A
-        return A.reshape(self.N, self.N, self.k, 1)*A.conj().reshape(self.N, self.N, 1, self.k)
+        return A[(...,) + (None,)*self.ncol]*A.conj().reshape(self.aux_shape)
     
     def _derivative(self, B):
-        first=self.A.reshape(self.N, self.N, self.k, 1)*B.conj().reshape(self.N, self.N, 1, self.k)
-        second=B.reshape(self.N, self.N, self.k, 1)*self.A.conj().reshape(self.N, self.N, 1, self.k)
+        first=self.A[(...,) + (None,)*self.ncol] * B.conj().reshape(self.aux_shape)
+        second=B[(...,) + (None,)*self.ncol]*self.A.conj().reshape(self.aux_shape)
         return first+second
     
     def _adjoint(self, C):
-        second_adj=np.sum(C*self.A.reshape(self.N, self.N, 1, self.k), axis=-1)
-        first_adj=np.sum(C*self.A.conj().reshape(self.N, self.N, self.k, 1), axis=-2).conj()
+        second_adj=np.sum(C*self.A.reshape(self.aux_shape), axis=tuple(np.arange(-self.ncol,0,1)))
+        first_adj=np.sum(C*self.A[(...,) + (None,)*self.ncol].conj(), 
+                         axis=tuple(np.arange(-2*self.ncol,-self.ncol,1))).conj()
         return first_adj+second_adj
-        
+
 class MatrixAutoProductOp(Operator):
     """Operator mapping a rectangluar matrix E to the matrix product E*E^*.
     E may be represent mapping from a tensor space of shape shape_columns to a tensor 
@@ -146,6 +164,13 @@ class MatrixAutoProductOp(Operator):
     def _adjoint_eval(self, E):
         self.E = E
         return 2*self.prod_A_B(E, self.prod_As_G(E,E)) 
+
+    def _adjoint_data(self, data):
+        """expects *centered* intensities as data"""
+        toret = np.zeros_like(self.E)
+        for dat in data:
+            toret += 2*dat[(...,)+(None,)*self.ndim_col]*self.prod_As_G(np.conj(dat),self.E)
+        return toret/data.shape[0]
 
     def _adjoint_deriv(self, dE):
         return 2*(self.prod_A_B(self.E), self.prod_As_G(dE,self.E) 
@@ -280,6 +305,7 @@ class MatrixProductOp(Operator):
                         self.prod_A_B(self.E, self.prod_GT_A(dDE[0],np.conj(self.D))) 
                       + self.prod_A_B(dDE[1],  self.proj_GT_A(self.D,np.conj(self.D))),
                         axis=0)
+    
 
 class DiagMatrixProductOp(Operator):
     """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the diagonal of the matrix product D*E^*.
@@ -330,55 +356,6 @@ class DiagMatrixProductOp(Operator):
         return np.stack((G[(...,) + (None,)*self.ndim_col]*np.conj(self.E),
                          G[(...,) + (None,)*self.ndim_col]*np.conj(self.D)),
                         axis=0)
-    
-class Theta:
-    
-    """Implements the standard matrix product DxE -> D E^* as an operator. 
-    Its intended for use of matrices where the inner dimension is much smaller 
-    than the outer dimension, and the matrix product should never be actually computed
-    as it may not fit into storage.  
-    Therefore, we just apply _deriv_adjoint and _eval_adjoint.
-    """
-    
-    def __init__(self, N, k):
-        self.N=N
-        self.k=k
-        
-    """def _deriv_adjoint(self, D, E, dD, dE):
-        D=D.reshape(self.N**2, self.k*2)
-        E=E.reshape(self.N**2, self.k*2)
-        dD=dD.reshape(self.N**2, self.k*2)
-        dE=dE.reshape(self.N**2, self.k*2)
-        first=np.dot(D, dE.T.conj().dot(E))+np.dot(dD, E.T.conj().dot(E))
-        second=np.dot(dE, D.T.conj().dot(D))+np.dot(E, dD.T.conj().dot(D))
-        return first.reshape(self.N, self.N, self.k, self.k), second.reshape(self.N, self.N, self.k, self.k)"""
-    
-    def _deriv_adjoint(self, D, E, dDE):
-        dD=dDE[0, ...]
-        dE=dDE[1, ...]
-        first=self._backprop(D, E, D, dE)
-        second=self._backprop(D, E, dD, E)
-        return first+second
-    
-    def _eval_adjoint(self, D, E, C, k_C=None):
-        C_1=C[0, ...]
-        C_2=C[1, ...]
-        return self._backprop(D, E, C_1, C_2, k_G=k_C)
-    
-    def _backprop(self, D, E, G_1, G_2, k_G=None):
-        if k_G is None:
-            k_G=self.k**2
-        D=D.reshape(self.N**2, self.k**2)
-        E=E.reshape(self.N**2, self.k**2)
-        G_1=G_1.reshape(self.N**2, k_G)
-        G_2=G_2.reshape(self.N**2, k_G)
-        first=np.dot(G_1, G_2.T.conj().dot(E))
-        second=np.dot(G_2, G_1.T.conj().dot(D))
-        res=np.zeros((2, self.N, self.N, self.k, self.k), dtype=complex)
-        res[0, ...]=first.reshape(self.N, self.N, self.k, self.k)
-        res[1, ...]=second.reshape(self.N, self.N, self.k, self.k)
-        return res
-    
     
 class Mat(Operator):
     

@@ -21,7 +21,7 @@ import matplotlib.animation as animation
 import time
 
 from auxiliary_ops import ReIm,  _build_fresnel_2, fresnel_prop, Ptw_Multiplication, Proj, Reshape, Real_to_complex
-from phaseless_passive_ip_ops import  Mat, Theta_2, Tau, Corr
+from phaseless_passive_ip_ops import  Mat, Tau, Corr
 from low_rank_op_misfit_fct import HilbertSchmidtLowRank
 from create_Vcov import _create_Vcov
 
@@ -85,9 +85,8 @@ grid_dom=UniformGridFcts(np.arange(2), xsample, ysample)
 mask=(contrast!=0)
 #Rtc=Real_to_complex(grid_dom, grid)
 Mat_op=Mat(grid, grid_codomain, Vcov, fp)
-Tau_op=Tau(Mat_op.codomain, grid_codomain_2)
+Tau_op=Tau(VectorSpace(shape=(N_b,),dtype=complex), VectorSpace(shape=(N,N),dtype=complex))
 Proj_op=Proj(grid_codomain_2, grid_codomain_3)
-Theta_op=Theta_2(grid_codomain_3, grid_codomain_4, N, N_b) #The codomain has the dimension of the intensities
 Resh=Reshape(grid_codomain_2, grid_codomain_5)
 ReIm_op=ReIm(grid, grid_domain)
 op=Resh*Tau_op*Mat_op
