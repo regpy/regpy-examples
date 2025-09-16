@@ -4,7 +4,7 @@ import numpy as np
 import logging
 
 from regpy.operators import Operator
-from regpy.vecsps import UniformGridFcts,VectorSpace, DirectSum
+from regpy.vecsps import UniformGridFcts,NumPyVectorSpace, DirectSum
     
 class Corr(Operator):
     
@@ -53,8 +53,8 @@ class Tau(Operator):
     Then Tau(A) has shape shape_rows + shape_cols*2.
 
     Initialization:
-        domain: complex VectorSpace of shape shape_cols
-        codomain: complex VectorSpace of shape shape_rows
+        domain: complex NumPyVectorSpace of shape shape_cols
+        codomain: complex NumPyVectorSpace of shape shape_rows
     Input: 
         A: complex numpy array of shape shape_rows+shape_cols
     Output:
@@ -72,8 +72,8 @@ class Tau(Operator):
         self.shape_rows=codomain.shape
         self.nrow = len(self.shape_rows)
         self.aux_shape = self.shape_rows + (1,)*len(self.shape_cols) + self.shape_cols
-        super().__init__(domain=VectorSpace(shape=self.shape_rows+self.shape_cols,dtype=complex),
-                         codomain=VectorSpace(shape=self.shape_rows+self.shape_cols*2,dtype=complex),
+        super().__init__(domain=NumPyVectorSpace(shape=self.shape_rows+self.shape_cols,dtype=complex),
+                         codomain=NumPyVectorSpace(shape=self.shape_rows+self.shape_cols*2,dtype=complex),
                          linear=False)
         
     def _eval(self, A, differentiate=True):
@@ -107,8 +107,8 @@ class MatrixAutoProductOp(Operator):
     """
     
     def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,VectorSpace):
-            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace1}')
+        if not isinstance(MatrixSpace,NumPyVectorSpace):
+            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace1}')
         else:
             self.shape = MatrixSpace.shape
             dtype = MatrixSpace.dtype
@@ -122,8 +122,8 @@ class MatrixAutoProductOp(Operator):
 
         shape_domain = self.shape
         shape_codomain = self.shape_columns*2      
-        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
-                         VectorSpace(shape_codomain,dtype=dtype), 
+        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
+                         NumPyVectorSpace(shape_codomain,dtype=dtype), 
                          linear=False)
 
     def prod_A_Bs(self,A,B):
@@ -150,10 +150,13 @@ class MatrixAutoProductOp(Operator):
         ax = [np.arange(0,self.ndim_row),np.arange(0,self.ndim_row)]
         return np.tensordot(np.conj(A),G,ax)
 
-    def _eval(self, E, differentiate=False, adjoint_derivative=True):
+    def _eval(self, E, differentiate=False, return_adjoint_eval=True):
         if differentiate==True:
             self.E = E
-        return self.prod_A_Bs(E,E)
+        if return_adjoint_eval == False:
+            return self.prod_A_Bs(E,E)
+        else:
+            return self._adjoint_eval(E)
 
     def _derivative(self, dE):
         return self.prod_A_Bs(self.E,dE) + self.prod_A_Bs(dE,self.E)
@@ -172,7 +175,7 @@ class MatrixAutoProductOp(Operator):
             toret += 2*dat[(...,)+(None,)*self.ndim_col]*self.prod_As_G(np.conj(dat),self.E)
         return toret/data.shape[0]
 
-    def _adjoint_deriv(self, dE):
+    def _adjoint_derivative(self, dE):
         return 2*(self.prod_A_B(self.E), self.prod_As_G(dE,self.E) 
                   +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
 
@@ -188,7 +191,7 @@ class DiagMatrixAutoProductOp(Operator):
     """    
 
     def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,VectorSpace):
+        if not isinstance(MatrixSpace,NumPyVectorSpace):
             raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace}')
         else:
             self.shape = MatrixSpace.shape
@@ -204,8 +207,8 @@ class DiagMatrixAutoProductOp(Operator):
 
         shape_domain = self.shape
         shape_codomain = self.shape_columns      
-        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
-                         VectorSpace(shape_codomain,dtype=float), 
+        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
+                         NumPyVectorSpace(shape_codomain,dtype=float), 
                          linear=False)
 
     def _eval(self, E, differentiate=False):
@@ -234,8 +237,8 @@ class MatrixProductOp(Operator):
     """
     
     def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,VectorSpace):
-            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace1}')
+        if not isinstance(MatrixSpace,NumPyVectorSpace):
+            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace1}')
         else:
             self.shape = MatrixSpace.shape
             dtype = MatrixSpace.dtype
@@ -249,8 +252,8 @@ class MatrixProductOp(Operator):
 
         shape_domain = (2,)+self.shape
         shape_codomain = self.shape_columns*2      
-        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
-                         VectorSpace(shape_codomain,dtype=dtype), 
+        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
+                         NumPyVectorSpace(shape_codomain,dtype=dtype), 
                          linear=False)
 
     def prod_A_BT(self,A,B):
@@ -299,7 +302,7 @@ class MatrixProductOp(Operator):
                         self.prod_A_B(np.conj(self.E), self.prod_GT_A(DE[0],DE[0]))),
                         axis=0)
 
-    def _adjoint_deriv(self, dDE):
+    def _adjoint_derivative(self, dDE):
         return np.stack(self.prod_A_B(self.D, self.prod_GT_A(dDE[1],np.conj(self.E))) 
                       + self.prod_A_B(dDE[0],  self.proj_GT_A(self.E,np.conj(self.E))),
                         self.prod_A_B(self.E, self.prod_GT_A(dDE[0],np.conj(self.D))) 
@@ -322,8 +325,8 @@ class DiagMatrixProductOp(Operator):
     """    
 
     def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,VectorSpace):
-            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace}')
+        if not isinstance(MatrixSpace,NumPyVectorSpace):
+            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace}')
         else:
             self.shape = MatrixSpace.shape
             dtype = MatrixSpace.dtype
@@ -338,8 +341,8 @@ class DiagMatrixProductOp(Operator):
 
         shape_domain = (2,)+self.shape
         shape_codomain = self.shape_columns      
-        super().__init__(VectorSpace(shape_domain,dtype=dtype), 
-                         VectorSpace(shape_codomain,dtype=dtype), 
+        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
+                         NumPyVectorSpace(shape_codomain,dtype=dtype), 
                          linear=False)
 
     def _eval(self, DE, differentiate=False):
