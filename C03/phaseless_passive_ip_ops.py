@@ -168,7 +168,7 @@ class MatrixAutoProductOp(Operator):
         self.E = E
         return 2*self.prod_A_B(E, self.prod_As_G(E,E)) 
 
-    def _adjoint_data(self, data):
+    def adjoint_data(self, data):
         """expects *centered* intensities as data"""
         toret = np.zeros_like(self.E)
         for dat in data:
@@ -176,7 +176,7 @@ class MatrixAutoProductOp(Operator):
         return toret/data.shape[0]
 
     def _adjoint_derivative(self, dE):
-        return 2*(self.prod_A_B(self.E), self.prod_As_G(dE,self.E) 
+        return 2*(self.prod_A_B(self.E, self.prod_As_G(dE,self.E))
                   +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
 
 class DiagMatrixAutoProductOp(Operator):
