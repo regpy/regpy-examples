@@ -53,7 +53,7 @@ class HilbertSchmidtLowRank(Functional):
             assert dat.shape==self.cshape or dat.shape[:-1]==self.cshape
         self.data = data
 
-    def eval(self,X,arguments_identical=False):
+    def _eval(self,X,arguments_identical=False):
         U,V = self.domain.split(X)
         U_2d = U.reshape(np.prod(self.cshape),U.shape[-1])
         V_2d = V.reshape(np.prod(self.cshape),V.shape[-1])

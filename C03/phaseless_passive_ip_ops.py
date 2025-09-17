@@ -150,7 +150,7 @@ class MatrixAutoProductOp(Operator):
         ax = [np.arange(0,self.ndim_row),np.arange(0,self.ndim_row)]
         return np.tensordot(np.conj(A),G,ax)
 
-    def _eval(self, E, differentiate=False, return_adjoint_eval=True):
+    def _eval(self, E, differentiate=False, return_adjoint_eval=False):
         if differentiate==True:
             self.E = E
         if return_adjoint_eval == False:
