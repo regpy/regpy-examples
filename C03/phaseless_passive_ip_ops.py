@@ -218,176 +218,45 @@ class DiagMatrixAutoProductOp(Operator):
 
     def _adjoint(self,G):
         return 2*(G[(...,) + (None,)*self.ndim_col]*self.E)
-
-class MatrixProductOp(Operator):  
-    """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the matrix product D*E^T.
-    D and E may be represent mapping from a tensor space of shape shape_columns to a tensor 
-    space of shape shape_rows such that D and E are tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
-    Input:
-        DE:  numpy array with first dimension =2: D=DE[0,:] and E=DE[1,:] 
-        ndim_cols :  integer [default 1] number of dimensions of the domain of D,E as linear mappings
-    Output: matrix product
-        D @ E^T, a tensor of shape shape_col+shape_col
-    This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
-    the product of the other dimensions.
-    _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
+    
+class Contrast2FactorPhasedCovOp(Operator):    
+    """
+    Operator mapping 
+        f |-> D e^f V
+    Parameters:
+        Vcov = factor of the covariance matrix VV^* of the incident beam
+        Dfresnel: Fresnel propagator
+    Input: contrast
+    Output: A factor W = D e^f V of the covariance matrix WW^* of the phased measurement data
     """
     
-    def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,NumPyVectorSpace):
-            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace1}')
-        else:
-            self.shape = MatrixSpace.shape
-            dtype = MatrixSpace.dtype
-        if not isinstance(ndim_col,int):
-            raise TypeError('ndim_col must be integer.')
-            self.s = s
-        self.ndim_col = ndim_col
-        self.ndim_row = len(self.shape) - ndim_col
-        self.shape_columns = self.shape[:-ndim_col]
-        self.shape_rows = self.shape[-ndim_col:]
-
-        shape_domain = (2,)+self.shape
-        shape_codomain = self.shape_columns*2      
-        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
-                         NumPyVectorSpace(shape_codomain,dtype=dtype), 
+    def __init__(self, Vcov, Dfresnel):
+        self.k = Vcov.shape[-1]  # rank of covariance matrix of incident beam
+        assert Vcov.shape == Dfresnel.domain.shape+(self.k,)
+        self.Vcov=Vcov 
+        self.Dfresnel=Dfresnel
+        super().__init__(Dfresnel.domain, 
+                         NumPyVectorSpace(Dfresnel.codomain.shape+(self.k,),dtype=complex), 
                          linear=False)
 
-    def prod_A_BT(self,A,B):
-        # returns matrix product A * B^T 
-        # (sums over the "column axes" of A and B, which are assumed to be the last ones both in A and B)
-        ax = [np.arange(-self.ndim_col,0,1),np.arange(-self.ndim_col,0,1)]  
-        return np.tensordot(A,B,ax)
-
-    def prod_A_B(self,A,B):
-        # returns matrix product A * B 
-        # (sums over the "column axes" of A and B, which are assumed to be the last ones in A and the first ones in B)
-        ax = [np.arange(-self.ndim_col,0,1),np.arange(0,self.ndim_col,1)]  
-        return np.tensordot(A,B,ax)
- 
-    def prod_GT_A(self,G,A):
-        # returns matrix product G^T * A 
-        # (sums over "row axes", which are assumed to be the first ones both in G and A)
-        ax = [np.arange(0,self.ndim_row),np.arange(0,self.ndim_row)]
-        return np.tensordot(G,A,ax)
- 
-    def prod_G_A(self,G,A):
-        # returns matrix product G * A 
-        # (sums over "row axes", which are assumed to the  last ones of G and the first ones of A )
-        ax = [np.arange(-self.ndim_row,0,1),np.arange(0,self.ndim_row)]      
-        return np.tensordot(G,A,ax)
-
-    def _eval(self, DE, differentiate=False):
-        if differentiate==True:
-            self.D = DE[0]
-            self.E = DE[1]
-        return self.prod_A_BT(self.D,self.E)
-
-    def _derivative(self, dDE):
-        return (self.prod_A_BT(self.D,dDE[1]) 
-              + self.prod_A_BT(dDE[0],self.E))
-
-    def _adjoint(self, G):
-        return np.stack((self.prod_G_A(G,np.conj(self.E)),
-                        self.prod_GT_A(G,np.conj(self.D))),
-                        axis=0)
-
-    def _adjoint_eval(self, DE):
-        self.D = DE[0]
-        self.E = DE[1]
-        return np.stack((self.prod_A_B(np.conj(self.D), self.prod_GT_A(DE[1],DE[1])),
-                        self.prod_A_B(np.conj(self.E), self.prod_GT_A(DE[0],DE[0]))),
-                        axis=0)
-
-    def _adjoint_derivative(self, dDE):
-        return np.stack(self.prod_A_B(self.D, self.prod_GT_A(dDE[1],np.conj(self.E))) 
-                      + self.prod_A_B(dDE[0],  self.proj_GT_A(self.E,np.conj(self.E))),
-                        self.prod_A_B(self.E, self.prod_GT_A(dDE[0],np.conj(self.D))) 
-                      + self.prod_A_B(dDE[1],  self.proj_GT_A(self.D,np.conj(self.D))),
-                        axis=0)
-    
-
-class DiagMatrixProductOp(Operator):
-    """Operator mapping a pair of rectangluar matrices (D,E) of the same size to the diagonal of the matrix product D*E^*.
-    D and E may be represent mapping from a tensor space of shape shape_columns to a tensor 
-    space of shape shape_rows such that D and E are tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
-    Input:
-        DE:  numpy array with first dimension =2: D=DE[0,:] and E=DE[1,:] 
-        ndim_cols :  integer [default 1] number of dimensions of the domain of D,E as linear mappings
-    Output: matrix product
-        D @ E^*, a tensor of shape shape_col+shape_col
-    This operator is particularly useful if the product of the last ndim_cols dimensions is much smaller than 
-    the product of the other dimensions.
-    _deriv_adjoint and _eval_adjoint can be evaluated even if the matrix product does not fit into storage.
-    """    
-
-    def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,NumPyVectorSpace):
-            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace}')
-        else:
-            self.shape = MatrixSpace.shape
-            dtype = MatrixSpace.dtype
-        if not isinstance(ndim_col,int):
-            raise TypeError('ndim_col must be integer.')
-            self.s = s
-        self.ndim_col = ndim_col
-        self.ndim_row = len(self.shape) - ndim_col
-        self.shape_columns = self.shape[:-ndim_col]
-        self.shape_rows = self.shape[-ndim_col:]
-        self.sum_ax = tuple(np.arange(-self.ndim_col,0,1))
-
-        shape_domain = (2,)+self.shape
-        shape_codomain = self.shape_columns      
-        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
-                         NumPyVectorSpace(shape_codomain,dtype=dtype), 
-                         linear=False)
-
-    def _eval(self, DE, differentiate=False):
-        if differentiate==True:
-            self.D = DE[0]
-            self.E = DE[1]
-        return np.sum(DE[0]*DE[1],axis=self.sum_ax)
-    
-    def _derivative(self, dDE):
-        return (np.sum(self.D*dDE[1],axis=self.sum_ax) 
-              + np.sum(self.E*dDE[0],axis=self.sum_ax))
-    
-    def _adjoint(self,G):
-        return np.stack((G[(...,) + (None,)*self.ndim_col]*np.conj(self.E),
-                         G[(...,) + (None,)*self.ndim_col]*np.conj(self.D)),
-                        axis=0)
-    
-class Mat(Operator):
-    
-    """
-    Maps x-> D e^f V
-    """
-    
-    def __init__(self, domain, codomain, Vcov, fp):
-        self.N=domain.shape[0]
-        self.k=codomain.shape[-1]
-        self.Vcov=Vcov #[N, k]
-        self.fp=fp
-        super().__init__(domain, codomain, linear=False)
-
-    def _eval(self, x, differentiate=True):
+    def _eval(self, f, differentiate=True):
         if differentiate:
-            self.x=x
+            self.f=f
         mat=self.codomain.zeros()
         for i in range(0, self.k):
-            mat[:, :,  i]=self.fp(np.exp(x)*self.Vcov[:, i].reshape(self.N, self.N))
+            mat[:, :,  i]=self.Dfresnel(np.exp(f)*self.Vcov[:,:, i])
         return mat
     
     def _derivative(self, h):
         mat=self.codomain.zeros()
         for i in range(0, self.k):
-            mat[:, :, i]=self.fp(np.exp(self.x)*h*self.Vcov[:, i].reshape(self.N, self.N))
+            mat[:, :, i]=self.Dfresnel(np.exp(self.f)*h*self.Vcov[:,:, i])
         return mat
     
     def _adjoint(self, y):
         res=self.domain.zeros()
         for i in range(0, self.k):
-            right=self.Vcov.T.conj()[i, :].reshape(self.N, self.N)
-            left=self.fp._adjoint(y[:, :, i])
-            res+=right*left*np.exp(self.x.conj())
+            right=self.Vcov[:,:,i].conj()
+            left=self.Dfresnel._adjoint(y[:, :, i])
+            res+=right*left*np.exp(self.f.conj())
         return res

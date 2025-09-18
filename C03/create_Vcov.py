@@ -51,4 +51,4 @@ def _create_Vcov(N, N_b, create_type='fourier_domain', sigma=None, xsample=None,
     else:
         raise ValueError('No method specified')
         
-    return Vcov, S
+    return Vcov.reshape(N,N,N_b), S
