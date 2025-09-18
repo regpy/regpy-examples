@@ -170,10 +170,7 @@ class MatrixAutoProductOp(Operator):
 
     def _adjoint_data(self, data):
         """expects *centered* intensities as data"""
-        toret = np.zeros_like(self.E)
-        for dat in data:
-            toret += 2*dat[(...,)+(None,)*self.ndim_col]*self.prod_As_G(np.conj(dat),self.E)
-        return toret/data.shape[0]
+        return np.tensordot(data,self.prod_G_A(data,(2./data.shape[0])*self.E),[(0,),(0,)])
 
     def _adjoint_derivative(self, dE):
         return 2*(self.prod_A_B(self.E, self.prod_As_G(dE,self.E))
