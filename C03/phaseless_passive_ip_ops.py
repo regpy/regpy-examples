@@ -176,49 +176,91 @@ class MatrixAutoProductOp(Operator):
         return 2*(self.prod_A_B(self.E, self.prod_As_G(dE,self.E))
                   +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
 
-class DiagMatrixAutoProductOp(Operator):
-    """Operator mapping a rectangluar matrices E to the diagonal of the matrix product E*E^*.
-    E may be represent a mapping from a tensor space of shape shape_columns to a tensor 
-    space of shape shape_rows such that E is a tensor of shape shape_rows+shape_columns (+ in the sense of concatenation of tuples).
-    Input:
-        E:  numpy array 
-        ndim_cols :  integer [default 1] number of dimensions of the domain of E as linear mapping
-    Output: 
-        diag(E @ E^*), a tensor of shape shape_col
-    """    
+class CovarianceCoxModGaussian(Operator):
+    """ Operator that takes a complex matrix V as input and yields the covariance operator of the Cox process whose intensity 
+    is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
+    This operator is given explicitly by 
+        V |-> |V^*V|^2 + diag(|Diag (VV^*)|^2)
+    The associated linear mapping might act between tensor space such that V can be a tensor. 
 
-    def __init__(self, MatrixSpace,ndim_col=1):
-        if not isinstance(MatrixSpace,NumPyVectorSpace):
-            raise TypeError(f'First argument must be a VectorSpace. Was given {MatrixSpace}')
+    Parameters:
+    MatrixSpace: NumPyVectorSpace of the input tensors V
+    StateSpace: NumPyVectorSpace of the outputs 
+    """
+
+    def __init__(self,MatrixSpace,StateSpace):
+        if not isinstance(MatrixSpace,NumPyVectorSpace) or not isinstance(StateSpace,NumPyVectorSpace):
+            raise TypeError(f"domain and codomain must be NumPyVectorSpaces, got {domain} and {codomain}")
+        sh = StateSpace.shape
+        sh_long = MatrixSpace.shape
+        if not sh_long[:len(sh)] == sh:
+            raise ValueError(f"Last dimensions of domain must agree with those of codomain. Shape of given domain and codmain are {sh_long}, {sh} ")
+        sh_diff = sh_long[len(sh):]
+
+        Tau_op = Tau(NumPyVectorSpace(shape=sh_diff,dtype=complex),StateSpace.complex_space())
+        MatMul = MatrixAutoProductOp(Tau_op.codomain,ndim_col=len(sh_diff)*2)
+        self.Cov = MatMul * Tau_op
+        super().__init__(MatrixSpace, MatMul.codomain,linear=False)
+
+    def _eval(self,tau,differentiate=False,return_adjoint_eval=False):
+        if differentiate==False:
+            return self.Cov(tau)
         else:
-            self.shape = MatrixSpace.shape
-            dtype = MatrixSpace.dtype
-        if not isinstance(ndim_col,int):
-            raise TypeError('ndim_col must be integer.')
-            self.s = s
-        self.ndim_col = ndim_col
-        self.ndim_row = len(self.shape) - ndim_col
-        self.shape_columns = self.shape[:-ndim_col]
-        self.shape_rows = self.shape[-ndim_col:]
-        self.sum_ax = tuple(np.arange(-self.ndim_col,0,1))
+            res, self.derivCov = self.Cov.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
 
-        shape_domain = self.shape
-        shape_codomain = self.shape_columns      
-        super().__init__(NumPyVectorSpace(shape_domain,dtype=dtype), 
-                         NumPyVectorSpace(shape_codomain,dtype=float), 
-                         linear=False)
-
-    def _eval(self, E, differentiate=False):
-        if differentiate==True:
-            self.E = E
-        return np.sum(np.real(E*E.conj()),axis=self.sum_ax)
-    
-    def _derivative(self, dE):
-        return 2*(np.sum(self.E.real*dE.real,axis=self.sum_ax)+np.sum(dE.imag*self.E.imag,axis=self.sum_ax))
+    def _derivative(self,tau):
+        return self.derivCov(tau)
 
     def _adjoint(self,G):
-        return 2*(G[(...,) + (None,)*self.ndim_col]*self.E)
+        return self.derivCov.adjoint(G)
+
+    def _adjoint_eval(self,tau):
+        res, self.derivCov = self.Cov.linearize(tau,return_adjoint_eval=True)
+        return res
     
+    def _adjoint_data(self,data):
+        return self.Cov.adjoint_data(data)
+
+    def _adjoint_derivative(self,tau):
+        return self.derivCov.adjoint_eval(tau)
+
+class summation(Operator):
+    """
+    Operator that wraps the numpy.sum over (any number of) last axes of a numpy array.
+    Parameters:
+        domain: NumPyVectorSpace of input array
+        codomain: NumPyVectorSpace of output array
+    """
+    def __init__(self, domain, codomain):
+        if not isinstance(domain,NumPyVectorSpace) or not isinstance(codomain,NumPyVectorSpace):
+            raise TypeError(f"domain and codomain must be NumPyVectorSpaces, got {domain} and {codomain}")
+        sh = codomain.shape
+        if not domain.shape[:len(sh)] == sh:
+            raise ValueError(f"Last dimensions of domain must agree with those of codomain. Shape of given domain and codmain are {domain.shape}, {codomain.shape} ")
+        if not domain.dtype == codomain.dtype:
+            raise ValueError(f"Data types of domain and codomain must agree. Given: {domain.dtype} and {codomain.dtype}")
+        self.sum_axes = tuple(np.arange(len(sh),len(domain.shape)))
+        super().__init__(domain, codomain, linear=True)
+
+    def _eval(self, x):
+        return np.sum(x,axis=self.sum_axes)
+    
+    def _adjoint(self, y):
+        return np.broadcast_to(y[(...,)+(None,)*len(self.sum_axes)],self.domain.shape)
+
+def ExpectationCoxModGaussian(MatrixSpace,StateSpace):
+    """ Yields an operator that takes a complex matrix V as input and yields the expectation of the Cox process whose intensity 
+    is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
+    This operator is given explicitly by 
+        V |-> |Diag (VV^*)|^2
+    The associated linear mapping might act between tensor space such that V can be a tensor. 
+
+    Parameters:
+    MatrixSpace: NumPyVectorSpace of the input tensors V
+    StateSpace: NumPyVectorSpace of the outputs 
+    """
+    return summation(MatrixSpace.real_space(),StateSpace.real_space()) * SquaredModulus(MatrixSpace)
+
 class Contrast2FactorPhasedCovOp(Operator):    
     """
     Operator mapping 
