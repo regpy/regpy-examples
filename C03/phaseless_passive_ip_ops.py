@@ -176,7 +176,7 @@ class MatrixAutoProductOp(Operator):
         return 2*(self.prod_A_B(self.E, self.prod_As_G(dE,self.E))
                   +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
 
-class CovarianceCoxModGaussian(Operator):
+class CovarianceModGaussian(Operator):
     """ Operator that takes a complex matrix V as input and yields the covariance operator of the Cox process whose intensity 
     is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
     This operator is given explicitly by 
@@ -207,6 +207,7 @@ class CovarianceCoxModGaussian(Operator):
             return self.Cov(tau)
         else:
             res, self.derivCov = self.Cov.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
+            return res
 
     def _derivative(self,tau):
         return self.derivCov(tau)
@@ -224,6 +225,33 @@ class CovarianceCoxModGaussian(Operator):
     def _adjoint_derivative(self,tau):
         return self.derivCov.adjoint_eval(tau)
 
+class CovarianceCoxModGaussian(CovarianceModGaussian):
+    def __init__(self,MatrixSpace,StateSpace,T):
+        self.Exp = (1/T)*ExpectationCoxModGaussian(MatrixSpace,StateSpace)
+        super().__init__(MatrixSpace,StateSpace)
+
+    def _eval(self,tau,differentiate=False,return_adjoint_eval=False):
+        if differentiate==False:
+            return self.Cov(tau)
+        else:
+            resCox, self.derivCov = self.Cov.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
+            resExp, self.derivExp = self.Exp.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
+            return resCox + np.diag(resExp)
+
+    def _derivative(self,tau):
+        return self.derivCov(tau) + np.diag(self.derivExp(tau))
+
+    def _adjoint(self,G):
+        return self.derivCov.adjoint(G) + self.derivExp.adjoint(np.diag(G))
+
+    def _adjoint_eval(self,tau):
+        resCov, self.derivCov = self.Cov.linearize(tau,return_adjoint_eval=True)
+        resExp, self.derivExp = self.Exp.linearize(tau,return_adjoint_eval=True)
+        return resCov + resExp
+    
+    def _adjoint_derivative(self,tau):
+        return self.derivCov.adjoint_eval(tau) + self.derivExp.adjoint_eval(tau)
+    
 class summation(Operator):
     """
     Operator that wraps the numpy.sum over (any number of) last axes of a numpy array.
@@ -252,7 +280,7 @@ def ExpectationCoxModGaussian(MatrixSpace,StateSpace):
     """ Yields an operator that takes a complex matrix V as input and yields the expectation of the Cox process whose intensity 
     is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
     This operator is given explicitly by 
-        V |-> |Diag (VV^*)|^2
+        V |-> \sum_i |V[:,i]|^2
     The associated linear mapping might act between tensor space such that V can be a tensor. 
 
     Parameters:
