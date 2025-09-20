@@ -236,13 +236,23 @@ class CovarianceCoxModGaussian(CovarianceModGaussian):
         else:
             resCox, self.derivCov = self.Cov.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
             resExp, self.derivExp = self.Exp.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
-            return resCox + np.diag(resExp)
+            sh = resExp.sh
+            eye = np.eye(np.prod(sh), dtype=resExp.dtype).reshape(sh + sh)
+            # Note that the second summand below is "diag(resExp)"!
+            return resCox + eye * resExp.reshape(sh + (1,) * len(sh))
 
     def _derivative(self,tau):
-        return self.derivCov(tau) + np.diag(self.derivExp(tau))
+        dExp = self.derivExp(tau)
+        sh = dExp.sh
+        eye = np.eye(np.prod(sh), dtype=dExp.dtype).reshape(sh + sh)
+        # Again, second term is "diag(dExp)"
+        return self.derivCov(tau) + eye*dExp.reshape(sh + (1,) * len(sh))
 
     def _adjoint(self,G):
-        return self.derivCov.adjoint(G) + self.derivExp.adjoint(np.diag(G))
+        diagG = np.zeros_like(self.Exp)
+        for i in np.ndindex(self.Exp):
+            diagG[i]=G[i+i] 
+        return self.derivCov.adjoint(G) + self.derivExp.adjoint(diagG)
 
     def _adjoint_eval(self,tau):
         resCov, self.derivCov = self.Cov.linearize(tau,return_adjoint_eval=True)
