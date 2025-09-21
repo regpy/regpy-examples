@@ -149,14 +149,17 @@ def show_comparison_results(contrast, reco_intcorr,reco_meanint):
     axs[0, 0].imshow(contrast.real, vmin=vmin, vmax=vmax)
     axs[0, 0].set_title('exact',fontsize=fontsize)
     axs[0,0].set_ylabel("absorption")
-    axs[0, 0].axis('off')
+    axs[0, 0].xticks([])
+    axs[0, 0].yticks([])
+
 
     axs[1, 0].imshow(contrast.imag, vmin=vmin, vmax=vmax)
-    axs[0,1].set_ylabel("phase")
-    axs[1, 0].axis('off')
+    axs[1, 0].set_ylabel("phase")
+    axs[1, 0].xticks([])
+    axs[1, 0].yticks([])
 
     axs[0, 1].imshow(reco_intcorr.real, vmin=vmin, vmax=vmax)
-    axs[0, 1].set_title('intesity correlations',fontsize=fontsize)
+    axs[0, 1].set_title('intensity correlations',fontsize=fontsize)
     axs[0, 1].axis('off')
 
     axs[1, 1].imshow(reco_intcorr.imag, vmin=vmin, vmax=vmax)
