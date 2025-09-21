@@ -76,6 +76,36 @@ def show_comparison_results(contrast, reco_intcorr,reco_meanint):
     plt.legend()
     plt.show()
 
+def show_measurements(Vmat,intensities,data_meanint):
+     #cmap='Reds'
+     fontsize=10
+     levels=40
+     mean_intensity = np.sum(np.abs(Vmat[:,:,:])**2,axis=-1)
+     vmax = np.max(mean_intensity.flatten())
+     rank = Vmat.shape[-1]
+
+     fig, axs = plt.subplots(2, rank+1, figsize=(14, 7))
+
+     axs[0,0].set_ylabel('modes')
+     for i in range(rank):
+         axs[0,i].imshow(np.abs(Vmat[:,:,i])**2, vmax=vmax)
+         axs[0, i].axis('off')
+
+     im =axs[0,rank].imshow(mean_intensity, vmax=vmax)
+     axs[0,rank].axis('off')
+     axs[0,rank].set_title('mean intensity')
+
+     axs[1,0].set_ylabel('samples')
+     for i in range(rank):
+         axs[1,i].imshow((intensities[i,:,:]+data_meanint)/2, vmax=vmax)
+         axs[1, i].axis('off')
+
+     im =axs[1,rank].imshow(data_meanint, vmax=vmax)
+     axs[1,rank].axis('off')
+     axs[1,rank].set_title('data mean intensity')
+
+     return mean_intensity
+
 def show_results(contrast, reco, vmin=0.,vmax=0.2):
     #cmap='Reds'
     fontsize=10
