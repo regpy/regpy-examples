@@ -299,6 +299,7 @@ def ExpectationCoxModGaussian(MatrixSpace,StateSpace):
     """
     return summation(MatrixSpace.real_space(),StateSpace.real_space()) * SquaredModulus(MatrixSpace)
 
+from copy import deepcopy
 class Contrast2FactorPhasedCovOp(Operator):    
     """
     Operator mapping 
@@ -310,13 +311,19 @@ class Contrast2FactorPhasedCovOp(Operator):
     Output: A factor W = D e^f V of the covariance matrix WW^* of the phased measurement data
     """
     
-    def __init__(self, Vcov, Dfresnel):
+    def __init__(self, Vcov, Fresnel_prop):
         self.k = Vcov.shape[-1]  # rank of covariance matrix of incident beam
-        assert Vcov.shape == Dfresnel.domain.shape+(self.k,)
+        assert Vcov.shape == Fresnel_prop.domain.shape+(self.k,)
         self.Vcov=Vcov 
-        self.Dfresnel=Dfresnel
-        super().__init__(Dfresnel.domain, 
-                         NumPyVectorSpace(Dfresnel.codomain.shape+(self.k,),dtype=complex), 
+        self.Fresnel=Fresnel_prop
+        if not Fresnel_prop.linear: # may be only affinely linear if padding by 1 is used
+            Fresnel2 = deepcopy(Fresnel_prop)
+            _, self.DFresnel = Fresnel2.linearize(Fresnel2.domain.zeros())
+        else:
+            self.DFresnel = Fresnel_prop
+
+        super().__init__(Fresnel_prop.domain, 
+                         NumPyVectorSpace(Fresnel_prop.codomain.shape+(self.k,),dtype=complex), 
                          linear=False)
 
     def _eval(self, f, differentiate=True):
@@ -324,19 +331,19 @@ class Contrast2FactorPhasedCovOp(Operator):
             self.f=f
         mat=self.codomain.zeros()
         for i in range(0, self.k):
-            mat[:, :,  i]=self.Dfresnel(np.exp(f)*self.Vcov[:,:, i])
+            mat[:, :,  i]=self.Fresnel(np.exp(f)*self.Vcov[:,:, i])
         return mat
     
     def _derivative(self, h):
         mat=self.codomain.zeros()
         for i in range(0, self.k):
-            mat[:, :, i]=self.Dfresnel(np.exp(self.f)*h*self.Vcov[:,:, i])
+            mat[:, :, i]=self.DFresnel(np.exp(self.f)*h*self.Vcov[:,:, i])
         return mat
     
     def _adjoint(self, y):
         res=self.domain.zeros()
         for i in range(0, self.k):
             right=self.Vcov[:,:,i].conj()
-            left=self.Dfresnel._adjoint(y[:, :, i])
+            left=self.DFresnel.adjoint(y[:, :, i])
             res+=right*left*np.exp(self.f.conj())
         return res
