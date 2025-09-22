@@ -24,7 +24,7 @@ def test_image_cells(circle_strength=complex(0.01,0.01)):
     support_mask=((abs(X)**2+abs(Y)**2)<=0.6).astype('int')                    # constant circular bump
     return circle_strength*support_mask+(0.2*absorp + 0.2*complex(0,1) * phase)
 
-def show_comparison_results(contrast, reco_intcorr,reco_meanint):
+def show_comparison_results(contrast, reco_intcorr,reco_meanint,slice = np.s_[:,:]):
     vmin=0.
     vmax=0.2
     #cmap='Reds'
@@ -33,32 +33,32 @@ def show_comparison_results(contrast, reco_intcorr,reco_meanint):
     fig, axs = plt.subplots(2, 3, figsize=(14, 7))
     # Plot each image
 
-    axs[0, 0].imshow(contrast.real, vmin=vmin, vmax=vmax)
+    axs[0, 0].imshow(contrast[slice].real, vmin=vmin, vmax=vmax)
     axs[0, 0].set_title('exact',fontsize=fontsize)
     axs[0,0].set_ylabel("absorption",fontsize=fontsize)
     axs[0,0].set_xticks([])
     axs[0,0].set_yticks([])
     # axs[0, 0].axis('off')
 
-    axs[1,0].imshow(contrast.imag, vmin=vmin, vmax=vmax)
+    axs[1,0].imshow(contrast[slice].imag, vmin=vmin, vmax=vmax)
     axs[1,0].set_ylabel("phase",fontsize=fontsize)
     axs[1,0].set_xticks([])
     axs[1,0].set_yticks([])
     #axs[1, 0].axis('off')
 
-    axs[0, 1].imshow(reco_intcorr.real, vmin=vmin, vmax=vmax)
+    axs[0, 1].imshow(reco_intcorr[slice].real, vmin=vmin, vmax=vmax)
     axs[0, 1].set_title('intensity correlations',fontsize=fontsize)
     axs[0, 1].axis('off')
 
-    axs[1, 1].imshow(reco_intcorr.imag, vmin=vmin, vmax=vmax)
+    axs[1, 1].imshow(reco_intcorr[slice].imag, vmin=vmin, vmax=vmax)
     axs[1, 1].axis('off')
 
-    im5 = axs[0, 2].imshow(reco_meanint.real, vmin=vmin, vmax=vmax)
+    im5 = axs[0, 2].imshow(reco_meanint[slice].real, vmin=vmin, vmax=vmax)
     axs[0, 2].set_title('mean intensity',fontsize=fontsize)
     axs[0, 2].axis('off')
     fig.colorbar(im5, ax=axs[0, 2])
 
-    im6 = axs[1, 2].imshow(reco_meanint.imag, vmin=vmin, vmax=vmax)
+    im6 = axs[1, 2].imshow(reco_meanint[slice].imag, vmin=vmin, vmax=vmax)
     axs[1, 2].axis('off')
     fig.colorbar(im6, ax=axs[1, 2])
 
