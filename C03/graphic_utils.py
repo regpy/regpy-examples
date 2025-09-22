@@ -16,13 +16,13 @@ def test_image_circle_cross(N,M):
     support_mask=((abs(X)**2+abs(Y)**2)<=0.7).astype('int')   # constant circular bump
     return support_mask*(0.1*absorp+0.1*complex(0,1)*phase)
 
-def test_image_cells():
+def test_image_cells(circle_strength=complex(0.01,0.01)):
     absorp=np.load('cell1.npy')
     phase=np.load('cell2.npy')
     N,M = absorp.shape
     X,Y = np.meshgrid(np.linspace(-1,1,N), np.linspace(-1,1,M), sparse=False)    
     support_mask=((abs(X)**2+abs(Y)**2)<=0.6).astype('int')                    # constant circular bump
-    return (0.01+0.01*complex(0,1))*support_mask+(0.2*absorp + 0.2*complex(0,1) * phase)
+    return circle_strength*support_mask+(0.2*absorp + 0.2*complex(0,1) * phase)
 
 def show_comparison_results(contrast, reco_intcorr,reco_meanint):
     vmin=0.
@@ -120,7 +120,6 @@ def show_results(contrast, reco, vmin=0.,vmax=0.2):
     im2 = axs[0, 1].imshow(reco.real, vmin=vmin, vmax=vmax)
     axs[0, 1].set_title('Recovered absorption',fontsize=fontsize)
     axs[0, 1].axis('off')
-    fig.colorbar(im2, ax=axs[0, 1])
 
     im3 = axs[1, 0].imshow(contrast.imag, vmin=vmin, vmax=vmax)
     axs[1, 0].set_title('Exact phase',fontsize=fontsize)
