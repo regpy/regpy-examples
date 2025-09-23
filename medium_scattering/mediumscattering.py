@@ -109,7 +109,7 @@ class MediumScatteringBase(Operator):
         if grid.ndim == 2:
             if self.normalization == 'helmholtz':
                 compute_kernel = _compute_kernel_2d
-                normalization_factor = grid.volume_elem * self.wave_number**2*-np.exp(1j*np.pi/4)/np.sqrt(8*np.pi*self.wave_number)
+                normalization_factor = grid.volume_elem * self.wave_number**2*np.exp(1j*np.pi/4)/np.sqrt(8*np.pi*self.wave_number)
 
             elif self.normalization == 'schroedinger':
                 def compute_kernel(*args):
