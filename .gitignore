@@ -196,6 +196,9 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# ignore the vscode settings
+.vscode/*
+
 # ignore potential __init__.py in base directory
 __init__.py
 

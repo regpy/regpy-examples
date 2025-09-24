@@ -4,7 +4,8 @@ from regpy.operators import RealPart, SquaredModulus, Exponential, PtwMultiplica
 from regpy.operators.convolution import FresnelPropagator
 from regpy.vecsps import UniformGridFcts
 
-def get_xray_phase_contrast(domain, fresnel_number, absorption_fraction=0.0):
+def get_xray_phase_contrast(domain, fresnel_number, absorption_fraction=0.0,pad_amount=0,
+                               Fourier_truncation_amount=None):
     r"""Forward operator that models X-ray phase contrast imaging, also known as in-line
     holography or X-ray propagation imaging. Maps a given 2D-image phi, that describes
     the induced phase shifts in the X-ray wave-field directly behind the imaged sample,
@@ -20,12 +21,17 @@ def get_xray_phase_contrast(domain, fresnel_number, absorption_fraction=0.0):
         Fresnel number of the imaging setup, defined with respect to the lengthscale
         that corresponds to length 1 in domain.coords. Governs the strength of the
         diffractive effects.
-    absorption_fraction : float
+    absorption_fraction : float [optional: default 0.]
         Assumed constant ratio of X-ray absorption compared to refractive phase shifts,
         i.e. the value of the constant \(c_{\beta/\delta}\) described in Notes.
         The default value 0 corresponds to assuming a completely non-absorbing sample,
         which is often a justified assumption for objects composed only of light chemical
         elements.
+    pad_amount : int [optional, default 0]
+        Number of pixels to be added on each side of the image to avoid aliasing artifacts 
+        due to periodization
+    Fourier_truncation_amount : int [optional, default 1]
+        Number of pixel to be truncated in frequency domain to match size of actual detector array
 
     Notes
     -----
@@ -53,12 +59,12 @@ def get_xray_phase_contrast(domain, fresnel_number, absorption_fraction=0.0):
     image_to_wavefield_op = Exponential(domain_complex) *PtwMultiplication(domain_complex, -1j - absorption_fraction)
     # Fresnel propagator: models diffractive effects as the wave-field propagates from
     # the object to the detector: psi_0 |--> psi_d = FresnelPropagator(psi_0)
-    fresnel_prop = FresnelPropagator(domain_complex, fresnel_number)
+    fresnel_prop = FresnelPropagator(domain_complex, fresnel_number, pad_amount=pad_amount,pad_value=1., Fourier_truncation_amount=Fourier_truncation_amount)
 
     # Detection operator: Maps the wave-field psi_d at the detector onto the corresponding
     # intensities: psi_d |--> I = |psi_d|^2 (squared modulus operation that eliminates
     # phase-information)
-    detection_op = SquaredModulus(domain_complex)
+    detection_op = SquaredModulus(fresnel_prop.codomain)
 
     # Return total operator
     return detection_op * fresnel_prop * image_to_wavefield_op * real_to_complex_op
