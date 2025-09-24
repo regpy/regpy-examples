@@ -76,12 +76,13 @@ def show_comparison_results(contrast, reco_intcorr,reco_meanint,slice = np.s_[:,
     plt.legend()
     plt.show()
 
-def show_measurements(Vmat,intensities,data_meanint):
+def show_measurements(Vmat,intensities,data_meanint,vmin=0,vmax=None):
      #cmap='Reds'
      fontsize=10
      levels=40
      mean_intensity = np.sum(np.abs(Vmat[:,:,:])**2,axis=-1)
-     vmax = np.max(mean_intensity.flatten())
+     if vmax==None:
+         vmax = np.max(mean_intensity.flatten())
      rank = Vmat.shape[-1]
 
      fig, axs = plt.subplots(2, rank+1, figsize=(14, 7))
@@ -116,10 +117,12 @@ def show_results(contrast, reco, vmin=0.,vmax=0.2):
     im1 = axs[0, 0].imshow(contrast.real, vmin=vmin, vmax=vmax)
     axs[0, 0].set_title('absorption',fontsize=fontsize)
     axs[0, 0].axis('off')
+    fig.colorbar(im1, ax=axs[0, 0])
 
     im2 = axs[0, 1].imshow(reco.real, vmin=vmin, vmax=vmax)
     axs[0, 1].set_title('Recovered absorption',fontsize=fontsize)
     axs[0, 1].axis('off')
+    fig.colorbar(im2, ax=axs[0, 1])
 
     im3 = axs[1, 0].imshow(contrast.imag, vmin=vmin, vmax=vmax)
     axs[1, 0].set_title('Exact phase',fontsize=fontsize)
@@ -134,62 +137,4 @@ def show_results(contrast, reco, vmin=0.,vmax=0.2):
     # Adjust layout
     plt.tight_layout()
     #plt.subplot_tool()
-    plt.show()
-
-def show_comparison_results(contrast, reco_intcorr,reco_meanint):
-    vmin=0.
-    vmax=0.2
-    #cmap='Reds'
-    fontsize=10
-    levels=40
-    fig, axs = plt.subplots(2, 3, figsize=(14, 7))
-    # Plot each image
-
-    axs[0, 0].imshow(contrast.real, vmin=vmin, vmax=vmax)
-    axs[0, 0].set_title('exact',fontsize=fontsize)
-    axs[0,0].set_ylabel("absorption")
-    axs[0, 0].set_xticks([])
-    axs[0, 0].set_yticks([])
-
-
-    axs[1, 0].imshow(contrast.imag, vmin=vmin, vmax=vmax)
-    axs[1, 0].set_ylabel("phase")
-    axs[1, 0].set_xticks([])
-    axs[1, 0].set_yticks([])
-
-    axs[0, 1].imshow(reco_intcorr.real, vmin=vmin, vmax=vmax)
-    axs[0, 1].set_title('intensity correlations',fontsize=fontsize)
-    axs[0, 1].axis('off')
-
-    axs[1, 1].imshow(reco_intcorr.imag, vmin=vmin, vmax=vmax)
-    axs[1, 1].axis('off')
-
-    im5 = axs[0, 2].imshow(reco_meanint.real, vmin=vmin, vmax=vmax)
-    axs[0, 2].set_title('mean intensity',fontsize=fontsize)
-    axs[0, 2].axis('off')
-    fig.colorbar(im5, ax=axs[0, 2])
-
-    im6 = axs[1, 2].imshow(reco_meanint.imag, vmin=vmin, vmax=vmax)
-    axs[1, 2].axis('off')
-    fig.colorbar(im6, ax=axs[1, 2])
-
-    # Adjust layou
-    plt.tight_layout()
-    #plt.subplot_tool()
-    plt.show()
-
-
-    plt.figure(figsize=(14, 7))
-    N=contrast.shape[0]/2
-    plt.plot(reco_meanint[int(N/2), :].imag, label='Mean intensity')
-    plt.plot(reco_intcorr[int(N/2), :].imag, label='Intensity correlations')
-    plt.plot(contrast[int(N/2), :].imag, label='Exact phase')
-    plt.legend()
-    plt.show()
-
-    plt.figure(figsize=(14, 7))
-    plt.plot(reco_meanint[int(N/2), :].real, label='Mean intensity')
-    plt.plot(reco_intcorr[int(N/2), :].real, label='Intensity correlations')
-    plt.plot(contrast[int(N/2), :].real, label='Exact absorption')
-    plt.legend()
     plt.show()
