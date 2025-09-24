@@ -1,11 +1,14 @@
 import enum
 import numpy as np
-from numpy.fft import fftn, ifftn, fftshift, ifftshift
 import scipy.sparse.linalg as spla
 from scipy.special import hankel1, jv as besselj
 
 from regpy.operators import Operator
+from regpy.operators.convolution import PeriodicHelmholtzVolumePotential
+from regpy.operators import PtwMultiplication, SciPyLinearOperator, Identity
 from regpy import util, vecsps
+
+
 
 
 class MediumScatteringBase(Operator):
@@ -120,20 +123,17 @@ class MediumScatteringBase(Operator):
         self.normalization = normalization
         """The normalization"""
 
-        compute_kernel = None  # Silence linter
         if grid.ndim == 2:
             if self.normalization == 'helmholtz':
-                compute_kernel = _compute_kernel_2d
-                normalization_factor = grid.volume_elem * self.wave_number**2*-np.exp(1j*np.pi/4)/np.sqrt(8*np.pi*self.wave_number)
+                ls_fac = 1.
+                normalization_factor = grid.volume_elem * self.wave_number**2*np.exp(1j*np.pi/4)/np.sqrt(8*np.pi*self.wave_number)
 
             elif self.normalization == 'schroedinger':
-                def compute_kernel(*args):
-                    return _compute_kernel_2d(*args) / wave_number**2
+                ls_fac = 1/wave_number**2
                 normalization_factor = grid.volume_elem / (2*np.pi)**2
 
         elif grid.ndim == 3:
             if self.normalization == 'helmholtz':
-                compute_kernel = _compute_kernel_3d
                 normalization_factor = -grid.volume_elem * self.wave_number**2 / (4*np.pi)
 
             elif self.normalization == 'schroedinger':
@@ -141,9 +141,6 @@ class MediumScatteringBase(Operator):
 
         self.normalization_factor = normalization_factor
         """The normalization factor of the farfield matrix, to be used by subclasses."""
-
-        self.kernel = compute_kernel(2*wave_number*radius, grid.shape)
-        """The Lippmann-Schwinger kernel in Fourier space."""
 
         self.gmres_args = util.set_defaults(
             gmres_args, restart=10, rtol=1e-14, maxiter=100, atol=0.0
@@ -156,12 +153,14 @@ class MediumScatteringBase(Operator):
         self._totalfield = np.empty((np.sum(self.support), self.inc_matrix.shape[0]),
                                     dtype=complex)
         # noinspection PyArgumentList
-        self._lippmann_schwinger = spla.LinearOperator(
+        """self._lippmann_schwinger = spla.LinearOperator(
             (np.prod(self.domain.shape),) * 2,
             matvec=self._lippmann_schwinger_op,
             rmatvec=self._lippmann_schwinger_adjoint,
             dtype=complex
-        )
+        )"""
+
+        self._volume_pot = ls_fac*PeriodicHelmholtzVolumePotential(grid,wave_number)
 
     def _compute_farfield(self, farfield, inc_idx, v):
         """Abstract method, needs to be implemented by child classes.
@@ -189,21 +188,23 @@ class MediumScatteringBase(Operator):
     def _eval(self, contrast, differentiate=False, adjoint_derivative=False):
         contrast = contrast.copy()
         contrast[~self.support] = 0
-        self._contrast = contrast
         farfield = self.codomain.empty()
         rhs = self.domain.zeros()
+        self._lippmann_schwinger =  SciPyLinearOperator(Identity(self.domain)
+                                               + PtwMultiplication(self.domain,contrast) 
+                                                  * self._volume_pot)
         for j in range(self.inc_matrix.shape[0]):
             # Solve Lippmann-Schwinger equation v + a*conv(k, v) = a*u_inc for
             # the unknown v = a u_total. The Fourier coefficients of the
             # periodic convolution kernel k are precomputed.
             rhs[self.support] = self.inc_matrix[j, :] * contrast[self.support]
-            v = self._gmres(self._lippmann_schwinger, rhs).reshape(self.domain.shape)
+            v = self._gmres(self._lippmann_schwinger, rhs)
             self._compute_farfield(farfield, j, v)
             # The total field can be recovered from v in a stable manner by the formula
             # u_total = u_inc - conv(k, v)
             if differentiate or adjoint_derivative:
                 self._totalfield[:, j] = (
-                    self.inc_matrix[j, :] - ifftn(self.kernel * fftn(v))[self.support]
+                    self.inc_matrix[j, :] - self._volume_pot(v)[self.support]
                 )
         return farfield
 
@@ -214,7 +215,7 @@ class MediumScatteringBase(Operator):
         rhs = self.domain.zeros()
         for j in range(self.inc_matrix.shape[0]):
             rhs[self.support] = self._totalfield[:, j] * contrast
-            v = self._gmres(self._lippmann_schwinger, rhs).reshape(self.domain.shape)
+            v = self._gmres(self._lippmann_schwinger, rhs)
             self._compute_farfield(farfield, j, v)
         return farfield
 
@@ -223,65 +224,18 @@ class MediumScatteringBase(Operator):
         contrast = self.domain.zeros()
         for j in range(self.inc_matrix.shape[0]):
             self._compute_farfield_adjoint(farfield, j, v)
-            rhs = self._gmres(self._lippmann_schwinger.adjoint(), v).reshape(self.domain.shape)
+            rhs = self._gmres(self._lippmann_schwinger.adjoint(), v)
             aux = self._totalfield[:, j].conj() * rhs[self.support]
             contrast[self.support] += aux
         return contrast
 
     def _gmres(self, op, rhs):
-        result, info = spla.gmres(op, rhs.ravel(), **self.gmres_args)
+        result, info = spla.gmres(op, self.domain.flatten(rhs), **self.gmres_args)
         if info > 0:
             self.log.warn('Gmres failed to converge')
         elif info < 0:
             self.log.warn('Illegal Gmres input or breakdown')
-        return result
-
-    def _lippmann_schwinger_op(self, v):
-        """Lippmann-Schwinger operator in spatial domain on fine grid
-        """
-        v = v.reshape(self.domain.shape)
-        v = v + self._contrast * ifftn(self.kernel * fftn(v))
-        return v.ravel()
-
-    def _lippmann_schwinger_adjoint(self, v):
-        """Adjoint Lippmann-Schwinger operator in spatial domain on fine grid
-        """
-        v = v.reshape(self.domain.shape)
-        v = v + ifftn(np.conj(self.kernel) * fftn(np.conj(self._contrast) * v))
-        return v.ravel()
-
-
-# noinspection PyPep8Naming
-def _compute_kernel_2d(R, shape):
-    J = np.mgrid[[slice(-(s//2), (s+1)//2) for s in shape]]
-    piabsJ = np.pi * np.linalg.norm(J, axis=0)
-    Jzero = tuple(s//2 for s in shape)
-
-    K_hat =  R**2 / (piabsJ**2 - R**2) * (
-        1 + 1j*np.pi/2 * (
-            piabsJ * besselj(1, piabsJ) * hankel1(0, R) -
-            R * besselj(0, piabsJ) * hankel1(1, R)
-        )
-    )
-    K_hat[Jzero] = -1/(2*R) + 1j*np.pi/4 * hankel1(1, R)
-    K_hat[piabsJ == R] = 1j*np.pi*R/8 * (
-        besselj(0, R) * hankel1(0, R) + besselj(1, R) * hankel1(1, R)
-    )
-    return 2 * R * fftshift(K_hat)
-
-
-# noinspection PyPep8Naming
-def _compute_kernel_3d(R, shape):
-    J = np.mgrid[[slice(-(s//2), (s+1)//2) for s in shape]]
-    piabsJ = np.pi * np.linalg.norm(J, axis=0)
-    Jzero = tuple(s//2 for s in shape)
-
-    K_hat =  R**2 / (piabsJ**2 - R**2) * (
-        1 - np.exp(1j*R) * (np.cos(piabsJ) - 1j*R * np.sin(piabsJ) / piabsJ)
-    )
-    K_hat[Jzero] = -(1 - np.exp(1j*R) * (1 - 1j*R))
-    K_hat[piabsJ == R] = -1j/4 * (2*R)**(-1/2) * (1 - np.exp(1j*R) * np.sin(R) / R)
-    return (2*R)**(3/2) * fftshift(K_hat)
+        return self.domain.fromflat(result)
 
 
 class MediumScatteringFixed(MediumScatteringBase):
