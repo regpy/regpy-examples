@@ -198,3 +198,6 @@ cython_debug/
 
 # ignore potential __init__.py in base directory
 __init__.py
+
+# ignore priviate folder
+*/private 
