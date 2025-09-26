@@ -4,7 +4,7 @@ import scipy.sparse.linalg as spla
 from scipy.special import hankel1, jv as besselj
 
 from regpy.operators import Operator
-from regpy.operators.convolution import PeriodicHelmholtzVolumePotential
+from regpy.operators.convolution import PeriodizedHelmholtzVolumePotential
 from regpy.operators import PtwMultiplication, SciPyLinearOperator, Identity
 from regpy import util, vecsps
 
@@ -160,7 +160,7 @@ class MediumScatteringBase(Operator):
             dtype=complex
         )"""
 
-        self._volume_pot = ls_fac*PeriodicHelmholtzVolumePotential(grid,wave_number)
+        self._volume_pot = ls_fac*PeriodizedHelmholtzVolumePotential(grid,wave_number)
 
     def _compute_farfield(self, farfield, inc_idx, v):
         """Abstract method, needs to be implemented by child classes.
