@@ -30,7 +30,7 @@ op = MediumScatteringFixed(
 
 
 exact_solution = op.domain.zeros()
-r = np.linalg.norm(op.domain.coords, axis=0)
+r=op.domain.coord_distances()
 exact_solution[r < radius] = np.exp(-1/(radius - r[r < radius]**2))
 
 exact_data = op(exact_solution)

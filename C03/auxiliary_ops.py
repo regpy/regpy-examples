@@ -15,7 +15,7 @@ def _build_fresnel_2(domain, number=complex(0,1)/80):
     
     N=domain.shape[0]
     ft = FourierTransform(domain, centered=True)
-    frqs = ft.codomain.coords*0.5*np.pi*N
+    frqs = np.asarray(ft.codomain.coords)*0.5*np.pi*N
     propagation_factor = np.exp((-number * (frqs[0]**2 + frqs[1]**2)))
     fresnel_multiplier = Ptw_Multiplication(ft.codomain, propagation_factor)
     return ft.adjoint * fresnel_multiplier * ft
@@ -30,7 +30,7 @@ class fresnel_prop(Operator):
     def __init__(self, domain, number=complex(0,1)/80):
         self.N=domain.shape[0]
         self.number=number
-        frqs = domain.coords*0.5*np.pi*self.N
+        frqs = np.asarray(domain.coords)*0.5*np.pi*self.N
         self.propagation_factor = np.fft.fftshift(np.exp((-number * (frqs[0]**2 + frqs[1]**2))))
         super().__init__(domain, domain, linear=True)
         

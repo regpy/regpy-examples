@@ -89,14 +89,14 @@ class MediumScatteringBase(Operator):
         super().__init__(domain = grid, codomain=codomain)
 
         if support is None:
-            support = (np.linalg.norm(grid.coords, axis=0) <= radius)
+            support = (grid.coord_distances() <= radius)
         elif callable(support):
             support = np.asarray(support(grid, radius), dtype=bool)
         else:
             support = np.asarray(support, dtype=bool)
         if support.shape != self.domain.shape:
             raise RuntimeError(f"The constructed `support` has shape {support.shape} not matching the shape of the domain {self.domain.shape}")
-        if (support > (np.linalg.norm(self.domain.coords, axis=0) <= radius)).all():
+        if (support > (self.domain.coord_distances() <= radius)).all():
             raise RuntimeError(f"The constructed `support` lies outside the ball of `radius`.")
 
         self.support = support
@@ -116,7 +116,7 @@ class MediumScatteringBase(Operator):
         self.inc_directions = inc_directions
         """Array of incident directions"""
 
-        self.inc_matrix = np.exp(1j * wave_number * (inc_directions @ grid.coords[:, support]))
+        self.inc_matrix = np.exp(1j * wave_number * (inc_directions @ np.asarray(grid.coords)[:, support]))
 
         if normalization not in {'helmholtz', 'schroedinger'}:
             raise ValueError(f"`normalization` has be either `helmholtz` or `schroedinger` was given {normalization}.")
@@ -296,7 +296,7 @@ class MediumScatteringFixed(MediumScatteringBase):
         )
 
         self.farfield_matrix = self.normalization_factor * np.exp(
-            -1j * self.wave_number * (farfield_directions @ self.domain.coords[:, self.support])
+            -1j * self.wave_number * (farfield_directions @ np.asarray(self.domain.coords)[:, self.support])
         )
         """The farfield matrix."""
 
@@ -369,7 +369,7 @@ class MediumScatteringOneToMany(MediumScatteringBase):
         self.farfield_directions = farfield_directions
         """The farfield directions."""        
         self.farfield_matrix = self.normalization_factor * np.exp(
-            -1j * self.wave_number * (farfield_directions @ self.domain.coords[:, self.support])
+            -1j * self.wave_number * (farfield_directions @ np.asarray(self.domain.coords)[:, self.support])
         )
         """The farfield matrix."""
 
