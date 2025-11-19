@@ -89,7 +89,7 @@ ptw_detection= SquaredModulus(grid)
 mult=Ptw_Multiplication(grid, np.exp(contrast))
 ptw_op=ptw_detection*fp*mult
 
-#frqs = grid.coords*0.5*np.pi*N
+#frqs = np.asarray(grid.coords)*0.5*np.pi*N
 #FTcovui=np.fft.fftshift(np.exp(-coherence_len**2 * (frqs[0]**2 + frqs[1]**2)))
 #%%%%%%%%%%%%%%%%%%%%% Creating shot noise %%%%%%%%%%%%%%%%%%%%%%%%%%%%       
 corr_signal=np.zeros((N**2, N**2))

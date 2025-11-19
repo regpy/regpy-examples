@@ -43,12 +43,12 @@ if __name__ == '__main__':
         exact_density, exact_coils = mri_op.domain.split(exact_solution)  # returns views into exact_solution in this case
 
         # Exact density is just a square shape
-        exact_density[...] = (np.max(np.abs(grid.coords), axis=0) < 0.4)
+        exact_density[...] = (np.max(np.abs(np.asarray(grid.coords)), axis=0) < 0.4)
 
         # Exact coils are Gaussians centered on points on a circle
         centers = util.linspace_circle(exact_coils.shape[0]) / np.sqrt(2)
         for coil, center in zip(exact_coils, centers):
-            r = np.linalg.norm(grid.coords - center[:, np.newaxis, np.newaxis], axis=0)
+            r = grid.coord_distances(point=center)
             coil[...] = np.exp(-r**2 / 2)
 
         # Construct data (criminally), add noise

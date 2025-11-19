@@ -50,7 +50,7 @@ def _create_Vcov(N, N_b, create_type='fourier_random', sigma=0.5, xsample=None, 
         
         fourier=FourierTransform(grid, centered=True)
         #Multiply with the Gaussian function in Fourier domain,
-        func_freq=np.exp(-np.linalg.norm(fourier.codomain.coords, axis=0)**2/sigma**2)
+        func_freq=np.exp(-fourier.codomain.coord_distances()**2/sigma**2)
     
         # perform the cut-off function  
         vec_cut=cutoff_2d(xsample,ysample,s=s)

@@ -176,12 +176,13 @@ def sobolev_smoother(codomain, sobolev_index, factor=None, centered=False):
     # TODO Combine with Sobolev space implementation as much as possible
     grid, coilsgrid = codomain
     ft = FourierTransform(coilsgrid, axes=(1, 2), centered=centered)
+    ft_codomain_coord_slice=np.asarray(ft.codomain.coords[1:])
     if factor is None:
        mulfactor = grid.volume_elem * (
-                    1 + np.linalg.norm(ft.codomain.coords[1:], axis=0)**2
+                    1 + np.linalg.norm(ft_codomain_coord_slice, axis=0)**2
                                       )**(-sobolev_index / 2)
     else:
-        mulfactor = ( 1 + factor * np.linalg.norm(ft.codomain.coords[1:]/2./np.amax(np.abs(ft.codomain.coords[1:])), axis=0)**2
+        mulfactor = ( 1 + factor * np.linalg.norm(ft_codomain_coord_slice/2./np.amax(np.abs(ft_codomain_coord_slice)), axis=0)**2
                                                  )**(-sobolev_index / 2)
 
     mul = PtwMultiplication(ft.codomain, mulfactor)
