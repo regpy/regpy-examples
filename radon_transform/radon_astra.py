@@ -6,8 +6,8 @@ from regpy.vecsps import UniformGridFcts
 from scipy import sparse
 
 class RadonAstra2D(Operator):
-    """ this class implemets the 2D radonopertor for parallel and fanflat(fanbeam) geometry 
-    using the astra-toolbox, for instalation see https://astra-toolbox.com/docs/install.html
+    """ This class implements the 2D radonopertor for parallel and fanflat(fanbeam) geometry 
+    using the astra-toolbox, for installation see https://astra-toolbox.com/docs/install.html
     """    
     def __init__(self,num_pix:int,num_det:int,angles:np.array,geom_type="parallel",beam_type="strip",dx=1.,source_to_origin = None,origin_to_detector=None) -> None:
         """creates radon operator for parrlelel and fanflat(fanbeam) geometry
@@ -72,11 +72,11 @@ class RadonAstra2D(Operator):
         Parameters
         ----------
         f : np.array
-            object that  the radon transform is aplied on
-        differentiate : bool, optional
-            does notihing inherited from operator, by default False
-        adjoint_derivative : bool, optional
-             does notihing inherited from operator, by default False
+            object that  the Radon transform is aplied to
+        differentiate : bool, optional [default: False]
+            does notihing inherited from operator
+        adjoint_derivative : bool, optional [default: False]
+             does notihing inherited from operator
 
         Returns
         -------
@@ -120,7 +120,7 @@ class RadonAstra2D(Operator):
 
 class RadonMatrixAstra2D(Operator):
     """ this class implemets the 2D radonopertor for parallel and fanflat(fanbeam) geometry 
-    using the astra-toolbox, for instalation see https://astra-toolbox.com/docs/install.html
+    using the astra-toolbox, for installation see https://astra-toolbox.com/docs/install.html
     """    
     def __init__(self,num_pix:int,num_det:int,angles:np.array,geom_type="parallel",beam_type="strip",dx=1.,source_to_origin = None,origin_to_detector=None) -> None:
         """creates radon operator for parrlelel and fanflat(fanbeam) geometry, by creating a sparse matrix
@@ -161,7 +161,7 @@ class RadonMatrixAstra2D(Operator):
         
 
     def _create_projector(self):
-        """computes the linear radon operator using the astra library CPU implementation and the paramters defined in init
+        """computes the linear Radon operator using the astra library CPU implementation and the paramters defined in init
         """        
         #parralel beam
         if self.geom_type == 'parallel':
@@ -184,11 +184,11 @@ class RadonMatrixAstra2D(Operator):
         Parameters
         ----------
         f : np.array
-            object that  the radon transform is aplied on
-        differentiate : bool, optional
-            does notihing inherited from operator, by default False
-        adjoint_derivative : bool, optional
-             does notihing inherited from operator, by default False
+            object that  the radon transform is aplied to
+        differentiate : bool, optional [default: False]
+            does notihing inherited from operator
+        adjoint_derivative : bool, optional [default: False]
+             does notihing inherited from operator
 
         Returns
         -------
@@ -198,7 +198,7 @@ class RadonMatrixAstra2D(Operator):
         return (self.A@f.flatten()).reshape(self.codomain.shape[::-1]).T
     
     def _adjoint(self,g):
-        """computes the adjoint of the radon matrix
+        """computes the adjoint of the Radon matrix
 
         Parameters
         ----------
@@ -224,7 +224,7 @@ class RadonMatrixAstra2D(Operator):
 
 class RadonAstra3D(Operator):
     def __init__(self,num_pix,num_det,angles,geom_type,source_to_origin=0.,origin_to_detector=0.,dp=1,affine_shift_fkts_dic = None) -> None:
-        """creates 3D radon transform with the possibility of dynamic affine shifts
+        """creates 3D Radon transform with the possibility of dynamic affine shifts
         !!!needs gpu (?nvdia i.e cuda?) to run
 
         Parameters
