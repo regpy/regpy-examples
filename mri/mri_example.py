@@ -6,7 +6,7 @@ import numpy as np
 
 import regpy.stoprules as rules
 import regpy.util as util
-from examples.mri.mri import cartesian_sampling, normalize, parallel_mri, sobolev_smoother
+from mri import cartesian_sampling, normalize, parallel_mri, sobolev_smoother
 from regpy.solvers import RegularizationSetting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.vecsps import UniformGridFcts
