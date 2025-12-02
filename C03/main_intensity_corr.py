@@ -7,7 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from regpy.hilbert import L2, Sobolev
 from regpy.vecsps import UniformGridFcts
 from regpy.vecsps import VectorSpace
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.fista import FISTA
 from regpy.operators import FourierTransform
 import regpy.stoprules as rules
@@ -131,7 +131,7 @@ Im=ImaginaryPart(op.domain)
 
 penalty=QuadraticNonneg(ReIm_op.codomain)
 
-setting = TikhonovRegularizationSetting(op=Double*op*ReIm_op.adjoint, penalty=penalty, data_fid = Sfun,regpar=1e-20)
+setting = Setting(op=Double*op*ReIm_op.adjoint, penalty=penalty, data_fid = Sfun,regpar=1e-20)
 
 FISTA_solver = FISTA(setting)
 

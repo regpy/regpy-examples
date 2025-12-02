@@ -6,7 +6,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from regpy.hilbert import L2
 from regpy.vecsps import UniformGridFcts
 from regpy.vecsps import VectorSpace
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.fista import FISTA
 import regpy.stoprules as rules
 from regpy.operators import SquaredModulus
@@ -113,7 +113,7 @@ penalty=QuadraticNonneg(ReIm_op.codomain)
 
 penalty_2= QuadraticBilateralConstraints(ReIm_op.codomain, lb=0, ub=0.2)
 
-setting = TikhonovRegularizationSetting(op=op*ReIm_op.adjoint, penalty=penalty, data_fid = data_space, data_fid_shift=data,regpar=1e-20)
+setting = Setting(op=op*ReIm_op.adjoint, penalty=penalty, data_fid = data_space, data_fid_shift=data,regpar=1e-20)
 
 FISTA_solver = FISTA(setting)
 

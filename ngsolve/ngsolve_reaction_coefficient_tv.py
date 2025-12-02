@@ -10,7 +10,7 @@ import numpy as np
 
 import regpy.stoprules as rules
 from regpy.operators.ngsolve import Coefficient
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.forward_backward_splitting import ForwardBackwardSplitting
 from regpy.hilbert import L2, Sobolev
 from regpy.vecsps.ngsolve import NgsSpace
@@ -50,7 +50,7 @@ data = exact_data+noise
 init = domain.from_ngs ( 1 )
 init_data = op(init)
 
-setting = TikhonovRegularizationSetting(
+setting = Setting(
     op=op, 
     penalty=TV(h_domain=L2), 
     data_fid=HilbertNorm(h_space=Sobolev),

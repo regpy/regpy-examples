@@ -6,7 +6,7 @@ from ngsolve.meshes import Make1DMesh
 
 import regpy.stoprules as rules
 from regpy.operators.ngsolve import Coefficient
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 from regpy.hilbert import L2
 from regpy.vecsps.ngsolve import NgsSpace
@@ -44,7 +44,7 @@ data = exact_data + noise
 
 init = domain.from_ngs( 1 )
 
-setting = TikhonovRegularizationSetting(op=op, penalty=L2, data_fid=L2)
+setting = Setting(op=op, penalty=L2, data_fid=L2)
 
 landweber = Landweber(setting, data, init, stepsize=1)
 stoprule = (

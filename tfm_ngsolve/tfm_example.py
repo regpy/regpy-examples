@@ -5,7 +5,7 @@ from ngsolve.webgui import Draw
 from netgen.occ import *
 
 from regpy.vecsps.ngsolve import NgsSpace
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 import regpy.stoprules as rules
 from regpy.hilbert import L2Boundary, Hm0
@@ -149,7 +149,7 @@ Draw(codomain_rec.to_ngs(data), mesh_rec)
 
 
 
-setting = TikhonovRegularizationSetting(op=op_rec, penalty=L2Boundary, data_fid=Hm0)
+setting = Setting(op=op_rec, penalty=L2Boundary, data_fid=Hm0)
 init = domain_rec.from_ngs((0, 0, 0))
 
 landweber = Landweber(setting, data, init)

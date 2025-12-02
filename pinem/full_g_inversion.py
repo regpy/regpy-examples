@@ -11,7 +11,7 @@ from scipy.io import savemat
 import regpy.stoprules as rules
 from regpy.vecsps import DirectSum
 from regpy.hilbert import L2,Hm
-from regpy.solvers import TikhonovRegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.solvers.nonlinear.newton import NewtonCG
 from regpy.operators.parallel_operators import ParallelExecutionManager
@@ -201,7 +201,7 @@ if __name__ == '__main__':
         h_codomain = L2(weights=1/(scal**2+scal*data[0])) 
         for data_i in data[1:]:
             h_codomain +=  L2(weights=1/(scal**2 + scal*data_i))
-        setting = TikhonovRegularizationSetting(op=op, penalty=h_domain, data_fid=h_codomain)
+        setting = Setting(op=op, penalty=h_domain, data_fid=h_codomain)
 
         ##################### DEFINE INITIAL GUESS
         # the initial guess is constructed from initial 
