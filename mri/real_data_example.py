@@ -10,7 +10,7 @@ import regpy.stoprules as rules
 import regpy.util as uti
 from examples.mri.mri import cartesian_sampling, normalize, parallel_mri, sobolev_smoother, estimate_sampling_pattern
 from regpy.operators import PtwMultiplication
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import TikhonovRegularizationSetting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.vecsps import UniformGridFcts
 from regpy.hilbert import L2
@@ -59,7 +59,7 @@ init_density[...] = 1
 
 # ### Set up regularization method
 
-setting = RegularizationSetting(op=parallel_mri_op, penalty=L2, data_fid=L2)
+setting = TikhonovRegularizationSetting(op=parallel_mri_op, penalty=L2, data_fid=L2)
 
 solver = IrgnmCG(
     setting=setting,

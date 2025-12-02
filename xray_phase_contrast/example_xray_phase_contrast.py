@@ -3,7 +3,7 @@ from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from xray_phase_contrast_operator import get_xray_phase_contrast
 from regpy.hilbert import L2
 from regpy.vecsps import UniformGridFcts
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import TikhonovRegularizationSetting
 import regpy.stoprules as rules
 
 import numpy as np
@@ -42,7 +42,7 @@ noise = noise_level * op.codomain.randn()
 data = exact_data + noise
 
 # Image-reconstruction using the IRGNM method
-setting = RegularizationSetting(op=op, penalty=L2, data_fid=L2)
+setting = TikhonovRegularizationSetting(op=op, penalty=L2, data_fid=L2)
 solver = IrgnmCG(setting, data, regpar=10)
 stoprule = (
     rules.CountIterations(max_iterations=10) +

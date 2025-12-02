@@ -7,7 +7,7 @@ import numpy as np
 import regpy.stoprules as rules
 import regpy.util as util
 from examples.mri.mri import normalize, sobolev_smoother,full_parallel_mri_parallelized,DomainConversion
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import TikhonovRegularizationSetting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.vecsps import UniformGridFcts
 from regpy.hilbert import L2
@@ -60,7 +60,7 @@ if __name__ == '__main__':
         init_density, _ = smoothed_op.domain.split(init)
         init_density[...] = 1
 
-        setting = RegularizationSetting(op=smoothed_op, penalty=L2, data_fid=L2)
+        setting = TikhonovRegularizationSetting(op=smoothed_op, penalty=L2, data_fid=L2)
 
         solver = IrgnmCG(
             setting=setting,

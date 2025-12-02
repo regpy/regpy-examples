@@ -9,7 +9,7 @@ import netgen.geom2d as geom2d
 import regpy.stoprules as rules
 
 from regpy.operators.ngsolve import SecondOrderEllipticCoefficientPDE
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import TikhonovRegularizationSetting
 from regpy.solvers.nonlinear.landweber import Landweber
 from regpy.hilbert import L2, Sobolev
 from regpy.vecsps.ngsolve import NgsSpace
@@ -72,7 +72,7 @@ data = exact_data*(1+noise)
 init = domain.from_ngs ( 4 )
 init_data = op(init)
 
-setting = RegularizationSetting(op=op, penalty=Sobolev, data_fid=L2)
+setting = TikhonovRegularizationSetting(op=op, penalty=Sobolev, data_fid=L2)
 
 landweber = Landweber(setting, data, init, stepsize=5)
 stoprule = (

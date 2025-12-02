@@ -7,7 +7,7 @@ from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.solvers.nonlinear.newton import NewtonCG
 import regpy.stoprules as rules
 from regpy.hilbert import L2, Sobolev
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import TikhonovRegularizationSetting
 from dirichlet_op import DirichletOp
 from dirichlet_op import create_synthetic_data
 
@@ -22,7 +22,7 @@ op = DirichletOp(
     N_inc = 4
 )
 
-setting = RegularizationSetting(op=op, penalty=Sobolev, data_fid=L2)
+setting = TikhonovRegularizationSetting(op=op, penalty=Sobolev, data_fid=L2)
 
 #Exact data
 farfield, exact_solution = create_synthetic_data(op, true_curve='apple')
