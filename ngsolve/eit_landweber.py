@@ -61,7 +61,7 @@ init = domain.from_ngs(1)
 setting = Setting(op=op, penalty=Sobolev, data_fid=SobolevBoundary)
 
 #Discrepancy Principle usually stops very early
-landweber = Landweber(setting, data, init, stepsize=1)
+landweber = Landweber(setting, init,data, stepsize=1)
 stoprule = (
         rules.CountIterations(500) +
         rules.Discrepancy(setting.h_codomain.norm, data, noiselevel=setting.h_codomain.norm(noise), tau=1.2)

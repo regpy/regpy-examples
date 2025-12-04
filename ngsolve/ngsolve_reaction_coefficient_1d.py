@@ -46,7 +46,7 @@ init = domain.from_ngs( 1 )
 
 setting = Setting(op=op, penalty=L2, data_fid=L2)
 
-landweber = Landweber(setting, data, init, stepsize=1)
+landweber = Landweber(setting, init,data, stepsize=1)
 stoprule = (
         rules.CountIterations(10000) +
         rules.Discrepancy(setting.h_codomain.norm, data, noiselevel=setting.h_codomain.norm(noise), tau=1))

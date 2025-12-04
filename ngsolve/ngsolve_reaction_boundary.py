@@ -66,7 +66,7 @@ init = domain.from_ngs( 2 )
 
 setting = Setting(op=op, penalty=L2, data_fid=SobolevBoundary)
 
-solver = Landweber(setting, data, init, stepsize=500)
+solver = Landweber(setting, init,data, stepsize=500)
 stoprule = (
         rules.CountIterations(300) +
         rules.Discrepancy(setting.h_codomain.norm, data, noiselevel=1, tau=0))

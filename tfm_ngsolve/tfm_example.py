@@ -152,7 +152,7 @@ Draw(codomain_rec.to_ngs(data), mesh_rec)
 setting = Setting(op=op_rec, penalty=L2Boundary, data_fid=Hm0)
 init = domain_rec.from_ngs((0, 0, 0))
 
-landweber = Landweber(setting, data, init)
+landweber = Landweber(setting, init,data)
 
 stoprule = (
         rules.CountIterations(100) +

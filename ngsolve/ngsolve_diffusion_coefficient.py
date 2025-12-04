@@ -54,7 +54,7 @@ init_data = op(init)
 
 setting = Setting(op=op, penalty=L2, data_fid=Sobolev)
 
-landweber = Landweber(setting, data, init, stepsize=0.05)
+landweber = Landweber(setting, init,data, stepsize=0.05)
 stoprule = (
         rules.CountIterations(10000) +
         rules.Discrepancy(setting.h_codomain.norm, data, noiselevel=setting.h_codomain.norm(noise), tau=1.1))
