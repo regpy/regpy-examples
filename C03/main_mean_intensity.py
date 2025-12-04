@@ -113,7 +113,7 @@ penalty=QuadraticNonneg(ReIm_op.codomain)
 
 penalty_2= QuadraticBilateralConstraints(ReIm_op.codomain, lb=0, ub=0.2)
 
-setting = Setting(op=op*ReIm_op.adjoint, penalty=penalty, data_fid = data_space, data_fid_shift=data,regpar=1e-20)
+setting = Setting(op=op*ReIm_op.adjoint, penalty=penalty, data_fid = data_space, data=data,regpar=1e-20)
 
 FISTA_solver = FISTA(setting)
 

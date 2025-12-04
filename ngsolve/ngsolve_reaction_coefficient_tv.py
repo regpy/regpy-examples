@@ -54,7 +54,7 @@ setting = Setting(
     op=op, 
     penalty=TV(h_domain=L2), 
     data_fid=HilbertNorm(h_space=Sobolev),
-    data_fid_shift=data, 
+    data=data, 
     regpar = 5*10**(-6)
 )
 
