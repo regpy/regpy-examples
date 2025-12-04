@@ -39,9 +39,9 @@ setting = Setting(op, L2, L2)
 init = op.domain.ones()*0.5
 solver = IrgnmSemiSmooth(
     setting, # Regularization setting
-    data, # noisy data constructed above
     psi_minus=0, # lower bound
     psi_plus=1.5, # upper bound
+    data=data, # noisy data constructed above
     regpar=1, # initial regularization parameter
     regpar_step=0.7, # regularization parameter step
     init=init # initial guess
