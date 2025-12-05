@@ -1,5 +1,5 @@
-from regpy.solvers.nonlinear import LinearizedSolve
-from regpy.solvers.linear import FISTA,PDHG
+from regpy.solvers.nonlinear import IterativelyRegularizedNewton
+from regpy.solvers.linear import FISTA,TikhonovCG
 
 from xray_phase_contrast_operator import get_xray_phase_contrast
 from regpy.hilbert import L2
@@ -44,11 +44,11 @@ noise = noise_level * op.codomain.randn()
 data = exact_data + noise
 
 # Image-reconstruction using the combined linearization method
-setting = Setting(op=op, penalty=QuadNonneg(op.domain), data_fid=L2,data=data)
+setting = Setting(op=op, penalty=L2, data_fid=L2,data=data)
 inner_stoprule=lambda setting:rules.DualityGapStopping(setting,threshold=1e-3)
-# inner_params={'tau':0.15}
-# solver = LinearizedSolve(setting,inner_solver=FISTA,inner_solver_stoprule=inner_stoprule,regpar=10,inner_solver_pars=inner_params)
-solver = LinearizedSolve(setting,inner_solver=FISTA,inner_solver_stoprule=inner_stoprule,regpar=10)
+solver = IterativelyRegularizedNewton(setting,inner_solver=FISTA,inner_solver_stoprule=inner_stoprule,regpar=10)
+# inner_stoprule=rules.CountIterations(100)
+# solver = LinearizedSolve(setting,inner_solver=TikhonovCG,inner_solver_stoprule=inner_stoprule,regpar=10)
 stoprule = (
     rules.CountIterations(max_iterations=10) +
     rules.Discrepancy(
