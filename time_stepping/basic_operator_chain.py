@@ -46,20 +46,3 @@ def time_dependent_operator_chain(time_step_ops,output_intermediate_solutions=Fa
     return OperatorGraph(time_step_ops,edges)
 
 
-
-#Example where time steps are replaced by simple product operators
-from regpy.operators import Product
-from regpy.vecsps import UniformGridFcts
-from regpy.util.operator_tests import test_operator
-
-N=9
-doms=[UniformGridFcts(2,3) for _ in range(N)]
-time_step_ops=[Product(doms[0]+doms[i]) for i in range(1,N)]
-
-chain=time_dependent_operator_chain(time_step_ops,output_intermediate_solutions=False,separate_parameter_inputs=True)
-test_operator(chain)
-print('Operator passed tests successfully!')
-print('Zeros in domain:')
-print(chain.domain.zeros())
-print('Result for constant 2 input:')
-print(chain(chain.domain.ones()*2))
