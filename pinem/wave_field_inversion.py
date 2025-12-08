@@ -2,8 +2,8 @@ from regpy.solvers.nonlinear.irgnm import IrgnmCG
 
 from regpy.operators import CoordinateProjection
 from operators import get_wave_field_reco
-from regpy.hilbert import L2, Hm
-from regpy.vecsps import UniformGridFcts
+from regpy.hilbert import L2, HmDomain
+from regpy.vecsps import UniformGridFcts,TupleVector
 from regpy.solvers import Setting
 import regpy.stoprules as rules
 
@@ -47,9 +47,9 @@ mask = mask | (abs((Xco-0.35)*(Xco-0.35)+(Yco-0.35)*(Yco-0.35)) <= 0.01)
 op = get_wave_field_reco(cgrid, fresnel_number, mask.astype(float), sol_type,parallel=False)  
 
 if sol_type == None:
-    h_domain =  Hm(cgrid,mask,dtype=complex,index=1)
+    h_domain =  HmDomain(cgrid,mask,dtype=complex,index=1)
 else:
-    h_domain = Hm(grid,mask,index=1)
+    h_domain = HmDomain(grid,mask,index=1)
 op = op
 
 # Create phantom image (= padded example-image)
@@ -65,7 +65,12 @@ exact_solution = exact_solution * mask  # - 4*(1-mask)
 
 # Create exact data and Poisson data
 exact_data = op(exact_solution)
-data = np.random.poisson(intensity * exact_data)/intensity
+data = TupleVector(np.random.poisson(intensity * exact_data)/intensity)
+
+data_sqrt=data/intensity
+for j in range(3):
+    data_sqrt[j]=np.sqrt(data_sqrt[j])
+# np.sqrt(data/intensity)
 
 # define codomain Gram matrix based on observed data to approximate log-likelihood
 h_codomain0 = L2(grid, weights=(1+intensity*data[0])/intensity)
@@ -82,13 +87,15 @@ solver = IrgnmCG(
     setting, data, regpar=0.1, regpar_step=2/3, init=init_vec,
     inner_it_logging_level=logging.INFO
 )
+
+
 stoprule = (
     rules.CountIterations(max_iterations=100) +
     rules.Discrepancy(
         setting.h_codomain.norm,
         data,
-        noiselevel=setting.h_codomain.norm(np.sqrt(data/intensity)),
-        tau=1
+        noiselevel=setting.h_codomain.norm(data_sqrt),
+        tau=1.05
     )
 )
 
