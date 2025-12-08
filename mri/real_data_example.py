@@ -7,8 +7,7 @@ import numpy as np
 from scipy.io import loadmat
 
 import regpy.stoprules as rules
-import regpy.util as uti
-from examples.mri.mri import cartesian_sampling, normalize, parallel_mri, sobolev_smoother, estimate_sampling_pattern
+from mri import  parallel_mri, sobolev_smoother, estimate_sampling_pattern
 from regpy.operators import PtwMultiplication
 from regpy.solvers import Setting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
@@ -39,7 +38,7 @@ nrcoils,n1,n2 = data.shape
 grid = UniformGridFcts((-1, 1, n1), (-1, 1, n2), dtype=complex)
 mask = estimate_sampling_pattern(data)
 plt.imshow(mask.T); plt.title('Undersampling pattern of data')
-
+plt.show()
 # ### Set up forward operator
 
 sobolev_index = 32
@@ -75,13 +74,10 @@ stoprule = rules.CountIterations(max_iterations=5)
 # Get an iterator from the solver
 
 it = iter(solver)
-
+plt.ion()
+fig = plt.figure(figsize = (15,9))
 for reco, reco_data in solver.while_(stoprule):
     rho, coils = smoother.codomain.split(smoother(reco))
-    #rho, coils = normalize(rho,coils)
-
-    fig = plt.figure(figsize = (15,9))
-
     gs = fig.add_gridspec(3,7)
     axs = [fig.add_subplot(gs[0:3, 0:3])]
     axs[0].imshow(np.abs(rho),cmap=mplib.colormaps['Greys_r'],origin='lower')
@@ -94,6 +90,7 @@ for reco, reco_data in solver.while_(stoprule):
             axs[-1].yaxis.set_ticklabels([])
     for j in range(nrcoils):
         axs[1+j].imshow(complex_to_rgb(coils[j,:,:]),origin='lower')
-    plt.show()
-
+    plt.pause(0.01)
+plt.ioff()
+plt.show()
 
