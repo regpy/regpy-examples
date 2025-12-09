@@ -45,7 +45,7 @@ data = exact_data + noise
 
 # Image-reconstruction using the combined linearization method
 setting = Setting(op=op, penalty=L2, data_fid=L2,data=data)
-inner_stoprule=lambda setting:rules.DualityGapStopping(setting,threshold=1e-3)
+inner_stoprule=lambda setting:rules.DualityGapStopping(tol=1e-3)
 solver = IterativelyRegularizedNewton(setting,inner_solver=FISTA,inner_solver_stoprule=inner_stoprule,regpar=10)
 # inner_stoprule=rules.CountIterations(100)
 # solver = IterativelyRegularizedNewton(setting,inner_solver=TikhonovCG,inner_solver_stoprule=inner_stoprule,regpar=10)
