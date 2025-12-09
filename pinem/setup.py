@@ -77,7 +77,8 @@ def setup_simulated_g(parallel=True,list_of_filters=None,N=30):
     a_psi0_multiplier = mask.astype(complex)
 
     grid = UniformGridFcts(np.arange(N1)*px_size[0][0],np.arange(N2)*px_size[0][1])
-    pad_amount = ((50,0),(0,0))
+    # pad_amount = ((50,0),(0,0))
+    pad_amount=[50,0]
     opdata = [grid, fresnel_number,pad_amount,a_psi0_multiplier]
     
     op = get_op_g_to_data(*opdata, 

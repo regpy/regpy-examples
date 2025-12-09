@@ -220,13 +220,12 @@ if __name__ == '__main__':
                 setting.h_codomain.norm,
                 data,
                 noiselevel= setting.h_codomain.norm(sqrtdata),
-                tau=1
+                tau=1.05
             )
         stoprule = (discrepancy_rule + rules.CountIterations(max_iterations=max_Newton_its,while_type=True))
             
 
         ########################################## PERFORM INVERSION
-
         if N_deriv:
             N_current = N_deriv[0]
             op_simple = get_op_g_to_data(*opdata, N=N_current)

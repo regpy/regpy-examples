@@ -67,11 +67,6 @@ exact_solution = exact_solution * mask  # - 4*(1-mask)
 exact_data = op(exact_solution)
 data = TupleVector(np.random.poisson(intensity * exact_data)/intensity)
 
-data_sqrt=data/intensity
-for j in range(3):
-    data_sqrt[j]=np.sqrt(data_sqrt[j])
-# np.sqrt(data/intensity)
-
 # define codomain Gram matrix based on observed data to approximate log-likelihood
 h_codomain0 = L2(grid, weights=(1+intensity*data[0])/intensity)
 h_codomain1 = L2(grid, weights=(1+intensity*data[1])/intensity)  
@@ -94,7 +89,7 @@ stoprule = (
     rules.Discrepancy(
         setting.h_codomain.norm,
         data,
-        noiselevel=setting.h_codomain.norm(data_sqrt),
+        noiselevel=setting.h_codomain.norm((data/intensity).component_wise(np.sqrt)),
         tau=1.05
     )
 )
