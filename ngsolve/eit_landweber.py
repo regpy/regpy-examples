@@ -10,7 +10,7 @@ from netgen.geom2d import SplineGeometry
 
 import regpy.stoprules as rules
 from regpy.operators.ngsolve import EIT, ProjectToBoundary
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 from regpy.hilbert import Sobolev, SobolevBoundary
 from regpy.vecsps.ngsolve import NgsSpace
@@ -58,7 +58,7 @@ data = exact_data+noise
 
 init = domain.from_ngs(1)
 
-setting = RegularizationSetting(op=op, penalty=Sobolev, data_fid=SobolevBoundary)
+setting = Setting(op=op, penalty=Sobolev, data_fid=SobolevBoundary)
 
 #Discrepancy Principle usually stops very early
 landweber = Landweber(setting, data, init, stepsize=1)

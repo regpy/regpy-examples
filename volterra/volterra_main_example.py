@@ -12,7 +12,7 @@ logging.basicConfig(
 
 
 from regpy.hilbert import L2
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.irgnm_semismooth import IrgnmSemiSmooth
 import regpy.stoprules as rules
 
@@ -33,7 +33,7 @@ noise = 0.3 * op.domain.randn()
 data = exact_data + noise
 
 # Define a regularization setting be choosing the hilbert spaces on the domain and codomain.
-setting = RegularizationSetting(op, L2, L2)
+setting = Setting(op, L2, L2)
 
 # Choose an initial guess and define the solver with the appropriate parameters
 init = op.domain.ones()*0.5

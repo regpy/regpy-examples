@@ -7,7 +7,7 @@ from ngsolve.webgui import Draw
 import numpy as np
 
 import regpy.stoprules as rules
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 from regpy.hilbert import L2, Sobolev
 from regpy.vecsps.ngsolve import NgsSpace
@@ -69,7 +69,7 @@ data = exact_data*(1+noise)
 init=domain.from_ngs((0.25,ngs.y*(1-ngs.y)))
 init_data = op(init)
 
-setting = RegularizationSetting(op=op, penalty=Sobolev, data_fid=L2)
+setting = Setting(op=op, penalty=Sobolev, data_fid=L2)
 
 landweber = Landweber(setting, data, init, stepsize=0.00001)
 stoprule = (

@@ -1,6 +1,6 @@
 from mediumscattering import MediumScatteringFixed
 from regpy.hilbert import L2,Hm
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear import IrgnmCG
 import regpy.stoprules as rules
 import regpy.util as util
@@ -38,7 +38,7 @@ exact_data = op(exact_solution)
 noise = 0.005 * op.codomain.randn()
 data = exact_data + noise
 
-setting = RegularizationSetting(
+setting = Setting(
     op=op,
     # Define Sobolev norm on support via embedding
     penalty = Hm(mask=op.support,dtype=complex,index=2), 

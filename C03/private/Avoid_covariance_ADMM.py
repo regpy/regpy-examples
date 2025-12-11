@@ -5,7 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 
 from regpy.hilbert import L2, Sobolev
 from regpy.vecsps import UniformGridFcts, GridFcts
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.irgnm import IrgnmCG
 from regpy.operators import FourierTransform
 import regpy.stoprules as rules

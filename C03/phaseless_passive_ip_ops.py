@@ -108,7 +108,7 @@ class MatrixAutoProductOp(Operator):
     
     def __init__(self, MatrixSpace,ndim_col=1):
         if not isinstance(MatrixSpace,NumPyVectorSpace):
-            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace1}')
+            raise TypeError(f'First argument must be a NumPyVectorSpace. Was given {MatrixSpace}')
         else:
             self.shape = MatrixSpace.shape
             dtype = MatrixSpace.dtype
@@ -190,7 +190,7 @@ class CovarianceModGaussian(Operator):
 
     def __init__(self,MatrixSpace,StateSpace):
         if not isinstance(MatrixSpace,NumPyVectorSpace) or not isinstance(StateSpace,NumPyVectorSpace):
-            raise TypeError(f"domain and codomain must be NumPyVectorSpaces, got {domain} and {codomain}")
+            raise TypeError(f"domain and codomain must be NumPyVectorSpaces, got {self.domain} and {self.codomain}")
         sh = StateSpace.shape
         sh_long = MatrixSpace.shape
         if not sh_long[:len(sh)] == sh:

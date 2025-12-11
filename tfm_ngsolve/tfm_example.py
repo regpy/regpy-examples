@@ -5,7 +5,7 @@ from ngsolve.webgui import Draw
 from netgen.occ import *
 
 from regpy.vecsps.ngsolve import NgsSpace
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 import regpy.stoprules as rules
 from regpy.hilbert import L2Boundary, Hm0
@@ -136,7 +136,7 @@ Draw(codomain_rec.to_ngs(data), mesh_rec)
 # 
 # Now, with available data we can use, e.g., landweber iteration to reconstruct the groundtruth traction force from the noisy displacement.
 # 
-# First, we can define the regularization setting using `RegularizationSetting`. To measure the error, we have to choose a penalty Hilbert space structure. Here we choose `penalty=L2Boundary` because the traction forces are elements of $L^2(\Gamma_{Top})$. Similar to measure the data misfit, we have to choose a data fidelity Hilbert space. Here we choose our Hilbert space `data_fid=Hm0` because the displacement is an element of $H^1_{0,\Gamma_{Bottom}}(\Omega)$. `L2Boundary` and `Hm0` are `AbstractSpace`s and the according implementation can be found in `regpy.hilbert.ngsolve`. 
+# First, we can define the regularization setting using `Setting`. To measure the error, we have to choose a penalty Hilbert space structure. Here we choose `penalty=L2Boundary` because the traction forces are elements of $L^2(\Gamma_{Top})$. Similar to measure the data misfit, we have to choose a data fidelity Hilbert space. Here we choose our Hilbert space `data_fid=Hm0` because the displacement is an element of $H^1_{0,\Gamma_{Bottom}}(\Omega)$. `L2Boundary` and `Hm0` are `AbstractSpace`s and the according implementation can be found in `regpy.hilbert.ngsolve`. 
 # 
 # As a next step we define the we choose an initial guess, in this case we choose zero. 
 # 
@@ -149,7 +149,7 @@ Draw(codomain_rec.to_ngs(data), mesh_rec)
 
 
 
-setting = RegularizationSetting(op=op_rec, penalty=L2Boundary, data_fid=Hm0)
+setting = Setting(op=op_rec, penalty=L2Boundary, data_fid=Hm0)
 init = domain_rec.from_ngs((0, 0, 0))
 
 landweber = Landweber(setting, data, init)
