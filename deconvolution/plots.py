@@ -43,15 +43,23 @@ def convergence_plot(setting,methods,title_string=''):
 
     fig, ax = plt.subplots(figsize=(10, 5))
     for method,i in zip(methods,range(len(methods))):
-        gap_stat = setting.get_stopping_rule(method).rules[0].history_dict['duality gap']
+        rule = setting.get_stopping_rule(method)
+        if 'duality gap' in rule.history_dict:  
+            stat = rule.history_dict['duality gap']
+            ylabel = 'duality gap'
+        elif 'dR' in rule.history_dict:
+            stat = [dSstar + dR for dSstar,dR in zip(rule.history_dict['dSstar'],rule.history_dict['dR'])]
+            ylabel = 'optimality gap'
+        else:
+            raise ValueError('No convergence history available for method {}'.format(method))
         color = color_cycle[i % len(color_cycle)]
-        ax.semilogy(gap_stat,label=method, linestyle='-',color=color)
+        ax.semilogy(stat,label=method, linestyle='-',color=color)
         rate =  setting._methods[method]['rate']
         if rate<1 and rate>0:
-            ref_rate = rate**np.arange(-len(gap_stat)+1,1) * 1.5*gap_stat[-1]
-            ax.semilogy(ref_rate, linestyle=':',color=color)    
+            ref_rate = rate**np.arange(-len(stat)+1,1) * 1.5*stat[-1]
+            ax.semilogy(ref_rate, linestyle=':',color=color)
     plt.legend()
-    plt.xlabel('it. step'); plt.ylabel('duality gap')
+    plt.xlabel('it. step'); plt.ylabel(ylabel)
     plt.title(title_string)
 
 
