@@ -3,8 +3,7 @@ import scipy.linalg as scla
 import os
 import sys
 sys.path.append(os.path.dirname(__file__))
-from functions.operator import op_S
-from functions.operator import op_K
+from functions.operator import op_S, op_K
 from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
@@ -49,7 +48,7 @@ class DirichletOp(Operator):
       Problems, 13 (1997) 1279–1299.
     """
 
-    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, N_FK=64, **kwargs):   
+    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, N_FK=64):   
         self.kappa = kappa 
         """Wave number."""          
         self.N_ieq = N_ieq
@@ -85,17 +84,10 @@ class DirichletOp(Operator):
         self.N_FK = N_FK
         """Number of Fourier coefficients."""
         self.domain_curve = None
-        self.dudn=None  
-        """Normal derivative of total field at boundary.""" 
         self.w_sl=-1*complex(0,1)*self.kappa
         self.w_dl=1
         """Weights of single and double layer potentials. Use a mixed single and double layer potential ansatz with
         weights w_sl and w_dl."""
-        self.L=None
-        self.U=None
-        self.perm=None
-        """LU factors + permuation for integral equation matrix."""
-        self.FF_combined=None
 
         meas_dir=np.linspace(0, 2*np.pi, self.N_meas, endpoint=False)
         inc_dir=np.linspace(0, 2*np.pi, self.N_inc, endpoint=False)
@@ -106,63 +98,60 @@ class DirichletOp(Operator):
             codomain=codomain,
             linear=False
         )
-    
-    def _eval(self, coeff, **kwargs):
+
+    def _eval(self, coeff, differentiate=True):
 
         self.domain_curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
         Iop_data = setup_iop_data(self.domain_curve, self.kappa)
 
+        # Assemble integral operator matrix
         if self.w_sl!=0:
             Iop = self.w_sl*op_S(self.domain_curve, Iop_data)
         else:
             Iop = np.zeros(np.size(self.domain.curve,1),np.size(self.domain.curve,1))
         if self.w_dl!=0:
             Iop = Iop + self.w_dl*(np.diag(self.domain_curve.zpabs)+op_K(self.domain_curve,Iop_data))
+        # LU-factorization of integral operator matrix
+        self.lu, self.piv = scla.lu_factor(Iop)
 
-        self.dudn = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
+        # Assemble far field operator matrix for operator application
         FF_SL = farfield_matrix(self.domain_curve,self.meas_directions,self.kappa,-1.,0.)
-
-        self.perm_mat, self.L, self.U = scla.lu(Iop)
-        self.perm = self.perm_mat.dot(np.arange(0, np.size(self.domain_curve.z,1)))
-        self.FF_combined = farfield_matrix(self.domain_curve,self.meas_directions,self.kappa, \
-                                           self.w_sl,self.w_dl)
         
-        farfield = np.zeros((self.N_meas,self.N_inc),dtype=complex)
+        if differentiate:
+            # Assemble far field operator matrix
+            self.FF_combined = farfield_matrix(self.domain_curve,self.meas_directions,self.kappa, \
+                                               self.w_sl,self.w_dl)        
+   
+        # Assemble right hand sides
+        rhs = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
         for l, dir in enumerate(self.inc_directions):
-            rhs = 2*np.exp(complex(0,1)*self.kappa*dir.dot(self.domain_curve.z))*  \
+            rhs[:,l] = 2*np.exp(complex(0,1)*self.kappa*dir.dot(self.domain_curve.z))*  \
                 (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.domain_curve.normal) \
                                          +self.w_sl*self.domain_curve.zpabs)
-            self.dudn[:, l] = np.linalg.solve(self.L.T, \
-                     np.linalg.solve(self.U.T, rhs[self.perm.astype(int)]))
-            farfield[:,l] = np.dot(FF_SL, self.dudn[:,l])
-        return farfield
+            
+        self.dudn = scla.lu_solve((self.lu,self.piv), rhs,trans=1)
+        """Normal derivative of total field at boundary."""
+
+        return np.dot(FF_SL, self.dudn)
 
     def _derivative(self, h):
-            der = np.zeros((self.N_meas,self.N_inc),dtype=complex)
-            for l in range(0, self.N_inc):
-                rhs = - 2*self.dudn[:,l]*(self.domain_curve.der_normal(h))*(self.domain_curve.zpabs.T)
-                phi = np.linalg.solve(self.U, np.linalg.solve(self.L, rhs[self.perm.astype(int)]))
-                der[:,l] = self.FF_combined.dot(phi)
-            return der
+        rhs = -2*self.domain_curve.zpabs[:,None] * np.ones(self.N_inc) 
+        rhs *= self.domain_curve.der_normal(h)[:,np.newaxis]
+        rhs = rhs * self.dudn
+        phi =  scla.lu_solve((self.lu,self.piv), rhs)
+
+        return self.FF_combined @ phi
 
     def _adjoint(self, g):
-            res = np.zeros(2*self.N_ieq, dtype=float)
-            rhs = np.zeros(2*self.N_ieq, dtype=complex)
+        phi = self.FF_combined.T.conj() @ g
+        rhs = scla.lu_solve((self.lu,self.piv), phi, trans=2)
+        res = np.sum((rhs*np.conjugate(self.dudn)).real,axis=1)
+        res *= -2.*self.domain_curve.zpabs
 
-            for  l in range(0, self.N_inc):
-                phi = self.FF_combined.T.conjugate().dot(g[:,l])
-
-                rhs[self.perm.astype(int)] = np.linalg.solve(self.L.T.conjugate(), \
-                np.linalg.solve(self.U.T.conjugate(), phi))
-                
-                res += -2*(rhs*np.conjugate(self.dudn[:,l])).real
-
-            adj = self.domain_curve.adjoint_der_normal(res*self.domain_curve.zpabs)
-
-            return adj
+        return self.domain_curve.adjoint_der_normal(res)
 
 
-def create_synthetic_data(Dir_op, true_curve, **kwargs):
+def create_synthetic_data(Dir_op, true_curve):
     wdlTmp=1*Dir_op.w_dl
     Dir_op.w_dl=0
 
