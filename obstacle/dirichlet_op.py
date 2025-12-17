@@ -27,7 +27,11 @@ class DirichletOp(Operator):
 
 
     where \(u=u^s+u^i)\ is the total field and \(D)\ is a bounded obstacle in \(\mathbb{R}^2)\ with \(\partial D\in\mathcal{C}^2)\.
-    
+
+    Rather than directly differentiating the forward operator, the Fréchet derivative is evaluated based on 
+    an independent discretization of the continuous characterization of this derivative. The adjoint of the 
+    Fréchet derivative is the discrete adjoint of derivative.
+
     Attributes
     ----------
     kappa : complex
@@ -150,27 +154,32 @@ class DirichletOp(Operator):
 
         return self.domain_curve.adjoint_der_normal(res)
 
+    def create_synthetic_data(self, true_curve, N_ieq_synth=64):
+        """
+        This alternative operator evaluation method is included to avoid inverse crimes. 
+        In contrast to the _eval, a potential ansatz is chosen in the boundary integral equation method 
+        rather than a direct ansatz. Moreover, a different discretization may be chosen.
+        """
+        bd_ex = true_curve(2*N_ieq_synth,2)
+        wdlTmp=1*self.w_dl
+        self.w_dl=0
 
-def create_synthetic_data(Dir_op, true_curve):
-    wdlTmp=1*Dir_op.w_dl
-    Dir_op.w_dl=0
+        Iop_data = setup_iop_data(bd_ex, self.kappa)
+        if self.w_sl!=0:
+            Iop = self.w_sl*op_S(bd_ex, Iop_data)
+        else:
+            Iop = np.zeros(2*N_ieq_synth,2*N_ieq_synth)
+        if self.w_dl!=0:
+            Iop = Iop + self.w_dl*(np.diag(bd_ex.zpabs) + op_K(bd_ex, Iop_data))
+            
+        FF_combined = farfield_matrix(bd_ex, self.meas_directions, self.kappa, self.w_sl, self.w_dl)
 
-    Iop_data = setup_iop_data(true_curve, Dir_op.kappa)
-    if Dir_op.w_sl!=0:
-        Iop = Dir_op.w_sl*op_S(true_curve, Iop_data)
-    else:
-        Iop = np.zeros(np.size(true_curve.z, 1), np.size(true_curve.z, 1))
-    if Dir_op.w_dl!=0:
-        Iop = Iop + Dir_op.w_dl*(np.diag(true_curve.zpabs) + op_K(true_curve, Iop_data))
-        
-    FF_combined = farfield_matrix(true_curve, Dir_op.meas_directions, Dir_op.kappa, Dir_op.w_sl, Dir_op.w_dl)
+        farfield = np.zeros((self.N_meas, self.N_inc),dtype = complex)
+        for l, dir in enumerate(self.inc_directions):
+            rhs = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*bd_ex.zpabs
+            rhs=rhs.flatten()
+            phi = scla.solve(Iop, rhs)
+            farfield[:,l]=FF_combined.dot(phi)
 
-    farfield = np.zeros((Dir_op.N_meas, Dir_op.N_inc),dtype = complex)
-    for l, dir in enumerate(Dir_op.inc_directions):
-        rhs = -2*np.exp(complex(0,1)*Dir_op.kappa*dir.dot(true_curve.z))*true_curve.zpabs
-        rhs=rhs.flatten()
-        phi = scla.solve(Iop, rhs)
-        farfield[:,l]=FF_combined.dot(phi)
-
-    Dir_op.w_dl=wdlTmp
-    return farfield, true_curve
+        self.w_dl=wdlTmp
+        return farfield, bd_ex

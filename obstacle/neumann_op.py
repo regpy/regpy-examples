@@ -8,7 +8,7 @@ from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 
-from regpy.vecsps.curve import StarCurveDiscr
+#from regpy.vecsps.curve import StarCurveDiscr
 from regpy.vecsps import GridFcts
 from regpy.vecsps.curve import GenTrigDiscr
 
@@ -72,11 +72,6 @@ class NeumannOp(Operator):
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
         """Weights of single and double layer potentials."""
-        self.L = None
-        self.U = None
-        self.perm = None
-        """LU factors + permuation for integral equation matrix."""
-        self.FF_combined=None
 
         meas_dir = np.linspace(0, 2*np.pi, self.N_meas, endpoint=False)
         inc_dir = np.linspace(0, 2*np.pi, self.N_inc, endpoint=False)
@@ -89,93 +84,99 @@ class NeumannOp(Operator):
         )
 
 
-    def _eval(self, coeff, differentiate=False): 
+    def _eval(self, coeff, differentiate=True): 
 
+        # assemble boundary integral operator
         self.domain_curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
         Iop_data = setup_iop_data(self.domain_curve, self.kappa)
-
         if self.w_dl!=0:
-            Iop = self.w_dl*op_T(self.domain_curve, Iop_data)
-          
+            Iop = self.w_dl*op_T(self.domain_curve, Iop_data)          
         else:
             Iop = np.zeros(np.size(self.domain_curve, 1), np.size(self.domain_curve, 1))
-        
         if self.w_sl!=0:
             Iop = Iop + self.w_sl*(op_K(self.domain_curve, Iop_data).T - np.diag(self.domain_curve.zpabs))
-        
 
-        self.u = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
+        # LU-factorization of integral operator matrix
+        self.lu, self.piv = scla.lu_factor(Iop)
+
+        # assemble far-field matrices
         FF_DL = farfield_matrix(self.domain_curve, self.meas_directions, self.kappa, 0, 1)
-        
-
-        self.perm_mat, self.L, self.U =scla.lu(Iop)
-        self.perm=self.perm_mat.dot(np.arange(0, np.size(self.domain_curve.z,1)))
-        self.FF_combined = farfield_matrix(self.domain_curve, self.meas_directions, self.kappa,\
+        if differentiate:        
+           self.FF_combined = farfield_matrix(self.domain_curve, self.meas_directions, self.kappa,\
                                            self.w_sl, self.w_dl)
-        
-        farfield = np.zeros((self.N_meas, self.N_inc), dtype=complex)
+
+        # assemble right-hand sides    
+        rhs = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
         for l, dir in enumerate(self.inc_directions):
-            rhs = -2*np.exp(complex(0,1)*self.kappa*dir.dot(self.domain_curve.z))*\
+            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(self.domain_curve.z))*\
                 (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.domain_curve.normal)\
                                          +self.w_sl*self.domain_curve.zpabs)
-            self.u[:, l] = np.linalg.solve(self.L.T,\
-                     np.linalg.solve(self.U.T, rhs[self.perm.astype(int)]))
-            
-            farfield[:,l] = np.dot(FF_DL, self.u[:,l])
-   
-        return farfield
-    
+        self.u =  scla.lu_solve((self.lu,self.piv), rhs,trans=1)
+        """total field at boundary."""
+        if differentiate:
+            self.duds = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
+            """arc-length derivative of total field at the boundary""" 
+            for l in range(0, self.N_inc):
+               self.duds[:,l] = self.domain_curve.arc_length_der(self.u[:,l])
 
+        return FF_DL @ self.u
+    
     def _derivative(self, h):
-            der = np.zeros((self.N_meas, self.N_inc),dtype=complex)
-            for l in range(0, self.N_inc):
-                duds = self.domain_curve.arc_length_der(self.u[:,l])
-                hn = self.domain_curve.der_normal(h)
-                rhs = self.domain_curve.arc_length_der(hn*duds) + self.kappa**2* hn*(self.u[:,l])
-                rhs = 2*rhs*(self.domain_curve.zpabs.T)
-                phi=np.linalg.solve(self.U, np.linalg.solve(self.L, rhs[self.perm.astype(int)]))
-                der[:,l] = self.FF_combined.dot(phi)
-            return der
+        hn = self.domain_curve.der_normal(h)
+        rhs = self.kappa**2* hn[:,None]*self.u
+        for l in range(0,self.N_inc):
+            rhs[:,l] += self.domain_curve.arc_length_der(hn*self.duds[:,l])
+        
+        rhs *= 2*self.domain_curve.zpabs[:,None]
+        phi =  scla.lu_solve((self.lu,self.piv), rhs)
+        return self.FF_combined @ phi 
 
+    def _adjoint(self, g):    
+        phi = self.FF_combined.T.conj() @ g
+        v = scla.lu_solve((self.lu,self.piv), phi, trans=2)
+        rhs = self.kappa**2*(v.conj() * self.u).real
 
-    def _adjoint(self, g):
-            res = complex(0,1)*np.zeros(2*self.N_ieq)
-            v = complex(0,1)*np.zeros(2*self.N_ieq)
+        for l in range(0, self.N_inc):
+            dvds = self.domain_curve.arc_length_der(v[:,l])
+            rhs[:,l] -= (dvds.conj() * self.duds[:,l]).real
 
-            for l in range(0, self.N_inc):
-                phi = self.FF_combined.T.conjugate().dot(g[:,l])
-                v[self.perm.astype(int)] = np.linalg.solve(self.L.T.conjugate(),\
-                np.linalg.solve(self.U.T.conjugate(), phi))
-                
-                dvds = self.domain_curve.arc_length_der(v)
-                duds = self.domain_curve.arc_length_der(self.u[:,l])
-                res = res -2*(np.conjugate(dvds)*duds - self.kappa**2*np.conjugate(v)*\
-                              self.u[:,l]).real
-            adj = self.domain_curve.adjoint_der_normal(res*self.domain_curve.zpabs.T)
-            return adj
+        res = np.sum(rhs,axis=1)
+        res *= 2.*self.domain_curve.zpabs
 
+        return self.domain_curve.adjoint_der_normal(res)
 
-def create_synthetic_data(Neu_op, true_curve, N_ieq_synth=64, **kwargs):
-    bd_ex = StarCurveDiscr(2*N_ieq_synth)
-    bd_ex_curve=bd_ex.bd_eval(true_curve, 3)
+        """for l in range(0, self.N_inc):
+            phi = self.FF_combined.T.conjugate().dot(g[:,l])
+            v[self.perm.astype(int)] = np.linalg.solve(self.L.T.conjugate(),\
+            np.linalg.solve(self.U.T.conjugate(), phi))
+            
+            dvds = self.domain_curve.arc_length_der(v)
+            duds = self.domain_curve.arc_length_der(self.u[:,l])
+            res = res -2*(np.conjugate(dvds)*duds - self.kappa**2*np.conjugate(v)*\
+                            self.u[:,l]).real
+        adj = self.domain_curve.adjoint_der_normal(res*self.domain_curve.zpabs.T)
+        return adj"""
+
+    def create_synthetic_data(self, true_curve, N_ieq_synth=64):
+        bd_ex = true_curve(2*N_ieq_synth,3)
+        
+        Iop_data = setup_iop_data(bd_ex, self.kappa)
+
+        if self.w_dl!=0:
+            Iop = self.w_dl*(op_T(bd_ex, Iop_data))
+        else:
+            Iop = np.zeros(2*N_ieq_synth,2*N_ieq_synth)
+
+        if self.w_sl!=0:
+            Iop = Iop + self.w_sl*(op_K(bd_ex, Iop_data).T-np.diag(bd_ex.zpabs))
     
-    Iop_data = setup_iop_data(bd_ex, Neu_op.kappa)
+        FF_combined = farfield_matrix(bd_ex, self.meas_directions, self.kappa, self.w_sl, self.w_dl)
+        farfield = np.zeros((self.N_meas, self.N_inc), dtype = complex)
 
-    if Neu_op.w_dl!=0:
-        Iop = Neu_op.w_dl*(op_T(bd_ex, Iop_data))
-    else:
-        Iop = np.zeros(np.size(bd_ex_curve.z, 1), np.size(bd_ex_curve.z, 1))
+        for l, dir in enumerate(self.inc_directions):
+            rhs = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*(complex(0,1)*self.kappa*dir.dot(bd_ex.normal))
+            rhs = rhs.flatten()
+            phi = scla.solve(Iop, rhs)
+            farfield[:,l]=FF_combined.dot(phi)
 
-    if Neu_op.w_sl!=0:
-        Iop = Iop + Neu_op.w_sl*(op_K(bd_ex, Iop_data).T-np.diag(bd_ex_curve.zpabs))
-   
-    FF_combined = farfield_matrix(bd_ex, Neu_op.meas_directions, Neu_op.kappa, Neu_op.w_sl, Neu_op.w_dl)
-    farfield = np.zeros((Neu_op.N_meas, Neu_op.N_inc), dtype = complex)
-
-    for l, dir in enumerate(Neu_op.inc_directions):
-        rhs = -2*np.exp(complex(0,1)*Neu_op.kappa*dir.dot(bd_ex_curve.z))*(complex(0,1)*Neu_op.kappa*dir.dot(bd_ex_curve.normal))
-        rhs = rhs.flatten()
-        phi = scla.solve(Iop, rhs)
-        farfield[:,l]=FF_combined.dot(phi)
-
-    return farfield, bd_ex_curve
+        return farfield, bd_ex
