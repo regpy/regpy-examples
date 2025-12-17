@@ -3,6 +3,7 @@ import scipy.linalg as scla
 
 from functions.operator import op_T
 from functions.operator import op_K
+from dirichlet_op import check_scattering_parameters
 
 from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
@@ -25,57 +26,23 @@ class NeumannOp(Operator):
 
 
     where \(u=u^s+u^i\) is the total field and \(D\) is the bounded obstacle in \mathbb{R}^2 with \(\partial D\in\mathcal{C}^2\).
-    
+
+    Parameters: 
+    kappa, N_ieq, inc_waves, meas_dir: see DirichletOp
+ 
     References
     ----------
     - T. Hohage. "Convergence rates of a regularized Newton method in sound-hard inverse scattering", 
     SIAM journal on numerical analysis, 36 (1998): 125-142."""
 
-    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, N_FK=64, **kwargs):
-        self.kappa = kappa 
-        """Wave number."""          
-        self.N_ieq = N_ieq
-        """(2*self.N_ieq) is the number of discrete boundary points."""
-        if isinstance(N_inc, int) and N_inc > 0:
-            self.N_inc = N_inc
-            """Number of incident direction."""
-            t=2*np.pi*np.arange(0, self.N_inc)/self.N_inc
-            self.inc_directions=[np.array([np.cos(s), np.sin(s)]) for s in t]
-            """Incident direction."""
-        elif isinstance(N_inc, list) and all([dir.shape == (2,) for dir in N_inc]):
-            self.N_inc = len(N_inc)
-            """Number of incident direction."""
-            self.inc_directions = N_inc 
-            """Incident direction."""
-        else: 
-            raise ValueError("Incident direction neither an arry of direction nor a positive integer")
-
-        if isinstance(N_meas, int) and N_meas > 0:
-            self.N_meas = N_meas
-            """Number of measurement direction."""
-            t=2*np.pi*np.arange(0, self.N_meas)/self.N_meas
-            self.meas_directions=[np.array([np.cos(s), np.sin(s)]) for s in t]
-            """Measurement direction."""
-        elif isinstance(N_meas, list) and all([meas.shape == (2,) for meas in N_meas]):
-            self.N_meas = len(N_meas)
-            """Number of Measurement direction."""
-            self.meas_directions = N_meas 
-            """Measurement direction."""
-        else: 
-            raise ValueError("Measurement direction neither an arry of direction nor a positive integer")
-
+    def __init__(self, kappa, N_ieq=128, inc_waves=4, meas_dir=64, N_FK=64):
+        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions, codomain \
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir)
         self.N_FK = N_FK
         """Number of Fourier coefficients."""
-        self.domain_curve = None
-        self.u=None  
-        """Values of total field at boundary."""
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
         """Weights of single and double layer potentials."""
-
-        meas_dir = np.linspace(0, 2*np.pi, self.N_meas, endpoint=False)
-        inc_dir = np.linspace(0, 2*np.pi, self.N_inc, endpoint=False)
-        codomain = GridFcts(meas_dir, inc_dir, dtype=complex)
 
         super().__init__(
             domain=GenTrigDiscr(2*self.N_FK),
@@ -83,100 +50,90 @@ class NeumannOp(Operator):
             linear=False
         )
 
-
     def _eval(self, coeff, differentiate=True): 
 
         # assemble boundary integral operator
-        self.domain_curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
-        Iop_data = setup_iop_data(self.domain_curve, self.kappa)
-        if self.w_dl!=0:
-            Iop = self.w_dl*op_T(self.domain_curve, Iop_data)          
-        else:
-            Iop = np.zeros(np.size(self.domain_curve, 1), np.size(self.domain_curve, 1))
+        self.curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
+        Iop_data = setup_iop_data(self.curve, self.kappa)
+        Iop = self.w_dl*op_T(self.curve, Iop_data) if self.w_dl!=0 \
+            else np.zeros((2*self.N_ieq, 2*self.N_ieq),dtype=complex)
         if self.w_sl!=0:
-            Iop = Iop + self.w_sl*(op_K(self.domain_curve, Iop_data).T - np.diag(self.domain_curve.zpabs))
+            Iop += self.w_sl*(op_K(self.curve, Iop_data).T - np.diag(self.curve.zpabs))
 
         # LU-factorization of integral operator matrix
         self.lu, self.piv = scla.lu_factor(Iop)
 
         # assemble far-field matrices
-        FF_DL = farfield_matrix(self.domain_curve, self.meas_directions, self.kappa, 0, 1)
+        FF_DL = farfield_matrix(self.curve, self.meas_directions, self.kappa, 0, 1)
         if differentiate:        
-           self.FF_combined = farfield_matrix(self.domain_curve, self.meas_directions, self.kappa,\
+           self.FF_combined = farfield_matrix(self.curve, self.meas_directions, self.kappa,\
                                            self.w_sl, self.w_dl)
 
         # assemble right-hand sides    
         rhs = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
         for l, dir in enumerate(self.inc_directions):
-            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(self.domain_curve.z))*\
-                (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.domain_curve.normal)\
-                                         +self.w_sl*self.domain_curve.zpabs)
+            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(self.curve.z))*\
+                (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.curve.normal)\
+                                         +self.w_sl*self.curve.zpabs)
         self.u =  scla.lu_solve((self.lu,self.piv), rhs,trans=1)
         """total field at boundary."""
+
         if differentiate:
             self.duds = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
             """arc-length derivative of total field at the boundary""" 
             for l in range(0, self.N_inc):
-               self.duds[:,l] = self.domain_curve.arc_length_der(self.u[:,l])
+               self.duds[:,l] = self.curve.arc_length_der(self.u[:,l])
+        else:
+            del self.u
 
         return FF_DL @ self.u
     
     def _derivative(self, h):
-        hn = self.domain_curve.der_normal(h)
+        hn = self.curve.der_normal(h)
         rhs = self.kappa**2* hn[:,None]*self.u
         for l in range(0,self.N_inc):
-            rhs[:,l] += self.domain_curve.arc_length_der(hn*self.duds[:,l])
+            rhs[:,l] += self.curve.arc_length_der(hn*self.duds[:,l])
         
-        rhs *= 2*self.domain_curve.zpabs[:,None]
-        phi =  scla.lu_solve((self.lu,self.piv), rhs)
-        return self.FF_combined @ phi 
+        rhs *= 2*self.curve.zpabs[:,None]
+        
+        return self.FF_combined @ scla.lu_solve((self.lu,self.piv), rhs)
 
-    def _adjoint(self, g):    
-        phi = self.FF_combined.T.conj() @ g
-        v = scla.lu_solve((self.lu,self.piv), phi, trans=2)
+    def _adjoint(self, g):
+        v =  scla.lu_solve((self.lu,self.piv),  self.FF_combined.T.conj() @ g, trans=2)
+
         rhs = self.kappa**2*(v.conj() * self.u).real
 
         for l in range(0, self.N_inc):
-            dvds = self.domain_curve.arc_length_der(v[:,l])
+            dvds = self.curve.arc_length_der(v[:,l])
             rhs[:,l] -= (dvds.conj() * self.duds[:,l]).real
 
         res = np.sum(rhs,axis=1)
-        res *= 2.*self.domain_curve.zpabs
+        res *= 2.*self.curve.zpabs
 
-        return self.domain_curve.adjoint_der_normal(res)
+        return self.curve.adjoint_der_normal(res)
 
-        """for l in range(0, self.N_inc):
-            phi = self.FF_combined.T.conjugate().dot(g[:,l])
-            v[self.perm.astype(int)] = np.linalg.solve(self.L.T.conjugate(),\
-            np.linalg.solve(self.U.T.conjugate(), phi))
-            
-            dvds = self.domain_curve.arc_length_der(v)
-            duds = self.domain_curve.arc_length_der(self.u[:,l])
-            res = res -2*(np.conjugate(dvds)*duds - self.kappa**2*np.conjugate(v)*\
-                            self.u[:,l]).real
-        adj = self.domain_curve.adjoint_der_normal(res*self.domain_curve.zpabs.T)
-        return adj"""
-
-    def create_synthetic_data(self, true_curve, N_ieq_synth=64):
+    def create_synthetic_data(self, true_curve, N_ieq_synth=128):
+        """
+        This alternative operator evaluation method is included to avoid inverse crimes. 
+        In contrast to the _eval, a potential ansatz is chosen in the boundary integral equation method 
+        rather than a direct ansatz. Moreover, a different discretization may be chosen.
+        """
         bd_ex = true_curve(2*N_ieq_synth,3)
         
         Iop_data = setup_iop_data(bd_ex, self.kappa)
 
-        if self.w_dl!=0:
-            Iop = self.w_dl*(op_T(bd_ex, Iop_data))
-        else:
-            Iop = np.zeros(2*N_ieq_synth,2*N_ieq_synth)
-
+        Iop = self.w_dl*(op_T(bd_ex, Iop_data)) if self.w_dl!=0 \
+          else np.zeros(2*N_ieq_synth,2*N_ieq_synth)
         if self.w_sl!=0:
-            Iop = Iop + self.w_sl*(op_K(bd_ex, Iop_data).T-np.diag(bd_ex.zpabs))
+            Iop += self.w_sl*(op_K(bd_ex, Iop_data).T-np.diag(bd_ex.zpabs))
     
         FF_combined = farfield_matrix(bd_ex, self.meas_directions, self.kappa, self.w_sl, self.w_dl)
-        farfield = np.zeros((self.N_meas, self.N_inc), dtype = complex)
 
+        rhs = np.zeros((2*N_ieq_synth,self.N_inc),dtype=complex)
         for l, dir in enumerate(self.inc_directions):
-            rhs = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*(complex(0,1)*self.kappa*dir.dot(bd_ex.normal))
-            rhs = rhs.flatten()
-            phi = scla.solve(Iop, rhs)
-            farfield[:,l]=FF_combined.dot(phi)
+            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*(complex(0,1)*self.kappa*dir.dot(bd_ex.normal))
+        
+        phi = scla.solve(Iop, rhs)
+        farfield=FF_combined @ phi 
 
         return farfield, bd_ex
