@@ -13,7 +13,7 @@ logging.basicConfig(
 
 from regpy.hilbert import L2
 from regpy.solvers import Setting
-from regpy.solvers.nonlinear.irgnm_semismooth import IrgnmSemiSmooth
+from regpy.solvers.nonlinear.irgnm_semismooth import NewtonSemiSmoothFrozen
 import regpy.stoprules as rules
 
 # Import operator Volterra from the definition in volterra.py and choose a grid and take the exponent to be 2 so that it is a non-linear operator. 
@@ -33,19 +33,26 @@ noise = 0.3 * op.domain.randn()
 data = exact_data + noise
 
 # Define a regularization setting be choosing the hilbert spaces on the domain and codomain.
-setting = Setting(op, L2, L2)
+setting = Setting(
+    op=op, 
+    penalty=L2, 
+    data_fid=L2,
+    data= data,
+    regpar= 1.)
 
 # Choose an initial guess and define the solver with the appropriate parameters
-init = op.domain.ones()*0.5
-solver = IrgnmSemiSmooth(
-    setting, # Regularization setting
-    psi_minus=0, # lower bound
-    psi_plus=1.5, # upper bound
-    data=data, # noisy data constructed above
-    regpar=1, # initial regularization parameter
-    regpar_step=0.7, # regularization parameter step
-    init=init # initial guess
-)
+init = op.domain.ones()*0.00005
+psi_minus = op.domain.ones()*0.0
+psi_plus = op.domain.ones()*1.1
+
+solver = NewtonSemiSmoothFrozen(
+    setting, 
+    data, 
+    alphas = (1,0.9),
+    psi_minus= psi_minus, 
+    psi_plus=psi_plus,
+    init = init, 
+    inner_NSS_iter_max=10)
 
 # Define a stoprule that will stop the regularization. here it is a combination of the iteration count and a discrepancy rule. 
 stoprule = (
@@ -53,7 +60,7 @@ stoprule = (
     rules.Discrepancy(
         setting.h_codomain.norm, data,
         noiselevel=setting.h_codomain.norm(noise),
-        tau=1.1
+        tau=1.4
     )
 )
 
