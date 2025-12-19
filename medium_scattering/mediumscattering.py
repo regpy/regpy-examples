@@ -14,7 +14,7 @@ from regpy import util, vecsps
 class MediumScatteringBase(Operator):
     """Acoustic scattering problem for inhomogeneous medium.
 
-    The forward problem is solved Vainikko's fast solver of the Lippmann
+    The forward problem is solved by Vainikko's fast solver of the Lippmann
     Schwinger equation.
 
     This is an abstract base class that computes the total field, but delegates
