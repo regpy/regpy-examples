@@ -2,7 +2,13 @@ import numpy as np
 import scipy.linalg as scla
 import scipy.sparse as scsp
 
+""" This file contains spectrally accurate discretizations of the standard boundary integral operators 
+as described in the monography by Colton and Kress "Acoustic and Electromagnetic scattering"
+"""
+
 def op_S(bd, dat):
+    """single layer potential operator
+    """
 
     dim = np.size(bd.z,1)
     M1 = -1/(2*np.pi)*dat.bess_H0.real
@@ -17,7 +23,8 @@ def op_S(bd, dat):
     return S
 
 def op_K(bd, dat):
-
+    """double layer potential operator 
+    """
     dim = np.size(bd.z,1)
     kappa = dat.kappa
 
@@ -33,7 +40,8 @@ def op_K(bd, dat):
     return K
 
 def op_T(bd, dat): 
-    
+    """ normal derivative of the double layer potential operator
+    """    
     dim=np.size(bd.z,1)
     z = bd.z
     zp = bd.zp
