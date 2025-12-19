@@ -9,7 +9,7 @@ from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigDiscr
+from regpy.vecsps.curve import GenTrigSpc
 
 
 
@@ -102,7 +102,7 @@ class DirichletOp(Operator):
         codomain=GridFcts(meas_dir, inc_dir, dtype=complex)
 
         super().__init__(
-            domain=GenTrigDiscr(2*self.N_FK),
+            domain=GenTrigSpc(2*self.N_FK),
             codomain=codomain,
             linear=False
         )

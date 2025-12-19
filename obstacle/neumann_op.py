@@ -10,7 +10,7 @@ from regpy.operators import Operator
 
 from regpy.vecsps.curve import StarCurveDiscr
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigDiscr
+from regpy.vecsps.curve import GenTrigSpc
 
 class NeumannOp(Operator):
     r"""Operator that maps the shape of a sound-hard obstacle to the far-field measurements. 
@@ -83,7 +83,7 @@ class NeumannOp(Operator):
         codomain = GridFcts(meas_dir, inc_dir, dtype=complex)
 
         super().__init__(
-            domain=GenTrigDiscr(2*self.N_FK),
+            domain=GenTrigSpc(2*self.N_FK),
             codomain=codomain,
             linear=False
         )

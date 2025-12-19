@@ -1,7 +1,7 @@
 import numpy as np
 
 from regpy.operators import Operator
-from regpy.vecsps.curve import StarTrigDiscr
+from regpy.vecsps.curve import StarTrigRadialFcts
 from  regpy.vecsps import UniformGridFcts
 
 class Potential(Operator):
@@ -54,7 +54,7 @@ class Potential(Operator):
         """The Fourier order of the forward solver."""
          
         super().__init__(
-            domain=StarTrigDiscr(2*N_ieq),
+            domain=StarTrigRadialFcts(2*N_ieq),
             codomain=UniformGridFcts(np.linspace(0, 2*np.pi, N_means, endpoint=False), dtype=complex)
         )
 
