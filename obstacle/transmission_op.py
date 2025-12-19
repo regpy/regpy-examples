@@ -11,7 +11,7 @@ from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigDiscr
+from regpy.vecsps.curve import GenTrigSpc
 
 
 class TransmissionOp(Operator):
@@ -54,7 +54,7 @@ class TransmissionOp(Operator):
         """Number of Fourier coefficients."""
 
         super().__init__(
-            domain = GenTrigDiscr(2*self.N_FK),
+            domain = GenTrigSpc(2*self.N_FK),
             codomain = codomain,
             linear = False
         )
