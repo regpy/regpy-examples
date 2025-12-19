@@ -15,7 +15,7 @@ import netgen.gui
 import numpy as np
 
 import regpy.stoprules as rules
-from regpy.solvers import RegularizationSetting
+from regpy.solvers import Setting
 from regpy.solvers.nonlinear.landweber import Landweber
 from regpy.hilbert import Sobolev, L2Boundary
 from regpy.vecsps.ngsolve import NgsVectorSpace
@@ -115,7 +115,7 @@ for i in range(0, N_g):
 noise=TupleVector(noise_list)
 data=exact_data+noise
 
-setting = RegularizationSetting(op=op, penalty=Sobolev, data_fid=L2Boundary)
+setting = Setting(op=op, penalty=Sobolev, data_fid=L2Boundary)
 
 init = domain.from_ngs(1)
 init_data = op(init)
