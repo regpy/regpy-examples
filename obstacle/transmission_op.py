@@ -34,7 +34,7 @@ class TransmissionOp(Operator):
     see T. Hohage & C. Schormann. "A Newton-type method for a transmission
     problem in inverse scattering", Inverse Problems, 14 (1998), 1207-1227."""
     
-    def __init__(self, kappa_in, kappa_ex, rho=4.3-6*complex(0,1), N_ieq=128, N_inc=4, N_meas=64, N_FK=64):
+    def __init__(self, kappa_in, kappa_ex, rho=4.3-6j, N_ieq=128, N_inc=4, N_meas=64, N_FK=64):
 
         self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,codomain \
             = check_scattering_parameters(kappa_ex,N_ieq,N_inc,N_meas)
@@ -54,7 +54,7 @@ class TransmissionOp(Operator):
         """Number of Fourier coefficients."""
 
         super().__init__(
-            domain = GenTrigSpc(2*self.N_FK),
+            domain = GenTrigSpc(self.N_FK),
             codomain = codomain,
             linear = False
         )

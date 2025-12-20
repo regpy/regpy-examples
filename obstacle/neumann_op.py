@@ -45,7 +45,7 @@ class NeumannOp(Operator):
         """Weights of single and double layer potentials."""
 
         super().__init__(
-            domain=GenTrigSpc(2*self.N_FK),
+            domain=GenTrigSpc(self.N_FK),
             codomain=codomain,
             linear=False
         )
@@ -78,6 +78,8 @@ class NeumannOp(Operator):
         self.u =  scla.lu_solve((self.lu,self.piv), rhs,trans=1)
         """total field at boundary."""
 
+        farfield = FF_DL @ self.u
+
         if differentiate:
             self.duds = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
             """arc-length derivative of total field at the boundary""" 
@@ -86,7 +88,7 @@ class NeumannOp(Operator):
         else:
             del self.u
 
-        return FF_DL @ self.u
+        return farfield
     
     def _derivative(self, h):
         hn = self.curve.der_normal(h)

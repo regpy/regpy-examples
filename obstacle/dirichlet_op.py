@@ -97,7 +97,7 @@ class DirichletOp(Operator):
         weights w_sl and w_dl."""
 
         super().__init__(
-            domain=GenTrigSpc(2*self.N_FK),
+            domain=GenTrigSpc(self.N_FK),
             codomain=codomain,
             linear=False
         )
