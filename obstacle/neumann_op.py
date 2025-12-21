@@ -45,7 +45,7 @@ class NeumannOp(Operator):
         """Weights of single and double layer potentials."""
 
         super().__init__(
-            domain=GenTrigSpc(self.N_FK),
+            domain=GenTrigSpc(self.N_FK,2*self.N_ieq),
             codomain=codomain,
             linear=False
         )
@@ -53,7 +53,7 @@ class NeumannOp(Operator):
     def _eval(self, coeff, differentiate=True): 
 
         # assemble boundary integral operator
-        self.curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
+        self.curve = self.domain.coeff2curve(coeff,3)
         Iop_data = setup_iop_data(self.curve, self.kappa)
         Iop = self.w_dl*op_T(self.curve, Iop_data) if self.w_dl!=0 \
             else np.zeros((2*self.N_ieq, 2*self.N_ieq),dtype=complex)
@@ -81,10 +81,8 @@ class NeumannOp(Operator):
         farfield = FF_DL @ self.u
 
         if differentiate:
-            self.duds = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
+            self.duds =  self.curve.arc_length_der(self.u)
             """arc-length derivative of total field at the boundary""" 
-            for l in range(0, self.N_inc):
-               self.duds[:,l] = self.curve.arc_length_der(self.u[:,l])
         else:
             del self.u
 
@@ -92,10 +90,9 @@ class NeumannOp(Operator):
     
     def _derivative(self, h):
         hn = self.curve.der_normal(h)
+
         rhs = self.kappa**2* hn[:,None]*self.u
-        for l in range(0,self.N_inc):
-            rhs[:,l] += self.curve.arc_length_der(hn*self.duds[:,l])
-        
+        rhs += self.curve.arc_length_der(hn[:,None]*self.duds)        
         rhs *= 2*self.curve.zpabs[:,None]
         
         return self.FF_combined @ scla.lu_solve((self.lu,self.piv), rhs)
@@ -103,11 +100,9 @@ class NeumannOp(Operator):
     def _adjoint(self, g):
         v =  scla.lu_solve((self.lu,self.piv),  self.FF_combined.T.conj() @ g, trans=2)
 
-        rhs = self.kappa**2*(v.conj() * self.u).real
-
-        for l in range(0, self.N_inc):
-            dvds = self.curve.arc_length_der(v[:,l])
-            rhs[:,l] -= (dvds.conj() * self.duds[:,l]).real
+        rhs = self.kappa**2*(v.conj() * self.u).real       
+        dvds = self.curve.arc_length_der(v)
+        rhs -= (dvds.conj() * self.duds).real
 
         res = np.sum(rhs,axis=1)
         res *= 2.*self.curve.zpabs

@@ -97,14 +97,14 @@ class DirichletOp(Operator):
         weights w_sl and w_dl."""
 
         super().__init__(
-            domain=GenTrigSpc(self.N_FK),
+            domain=GenTrigSpc(self.N_FK,2*N_ieq),
             codomain=codomain,
             linear=False
         )
 
     def _eval(self, coeff, differentiate=True):
 
-        self.curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
+        self.curve = self.domain.coeff2curve(coeff, 2)
         Iop_data = setup_iop_data(self.curve, self.kappa)
 
         # Assemble integral operator matrix

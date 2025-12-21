@@ -54,14 +54,14 @@ class TransmissionOp(Operator):
         """Number of Fourier coefficients."""
 
         super().__init__(
-            domain = GenTrigSpc(self.N_FK),
+            domain = GenTrigSpc(self.N_FK,2*self.N_ieq),
             codomain = codomain,
             linear = False
         )
 
 
     def _eval(self, coeff, differentiate=False):
-        self.curve = self.domain.bd_eval(coeff, 2*self.N_ieq, 3)
+        self.curve = self.domain.coeff2curve(coeff,3)
 
         # assemble system of boundary integral operators
         Iop_data_ex = setup_iop_data(self.curve, self.kappa_ex)
@@ -110,22 +110,20 @@ class TransmissionOp(Operator):
             self.ui = ue + uinc 
             self.duidnu= self.rho*(duednu + duincdnu)
             u = (1-self.rho)*self.ui
-            self.duds = np.zeros_like(u)
-            for l in range(0, self.N_inc):
-                self.duds[:,l]  = self.curve.arc_length_der(u[:,l])
+            self.duds  = self.curve.arc_length_der(u)
+        else:
+            del self.dudn
 
         return farfield
 
     def _derivative(self, h): 
         hn  = self.curve.der_normal(h)
-        rhs_a = (1/self.rho-1.)*hn[:,None]*self.duidnu
-        rhs_b = np.zeros_like(self.duds)    
-        for l in range(0, self.N_inc):            
-            rhs_b[:,l] = self.curve.arc_length_der(hn*self.duds[:,l])+self.kappa_in**2*hn\
-                        *self.ui[:,l]-self.rho*self.kappa_ex**2*hn*(self.ui[:,l])
+        rhs_a = (1/self.rho-1.)*hn[:,None]*self.duidnu      
+        rhs_b = self.curve.arc_length_der(hn[:,None]*self.duds)+self.kappa_in**2*hn[:,None]\
+                        *self.ui-self.rho*self.kappa_ex**2*hn[:,None]*(self.ui)
         rhs_b /= self.rho
         rhs = np.vstack((rhs_a, rhs_b))
-        phi = self.Iop.dot(rhs)
+        phi = self.Iop @ rhs
         return self.FF_combined @ phi
 
     def _adjoint(self, g):
@@ -137,14 +135,11 @@ class TransmissionOp(Operator):
         rhs_b = rhs[2*self.N_ieq:4*self.N_ieq,:]
         
         res = np.real(np.conjugate((1/self.rho-1.)*self.duidnu)*rhs_a) 
-        sres = np.sum(res,axis=1)
-        for l in range(self.N_inc):
-            sres -= np.real(np.conjugate(self.duds[:,l]/self.rho)*\
-                    self.curve.arc_length_der(rhs_b[:,l]/self.curve.zpabs.T)*self.curve.zpabs.T) 
-            sres += np.real(np.conjugate(self.kappa_in**2*self.ui[:,l]/self.rho-\
-                                  self.kappa_ex**2*(self.ui[:,l]))*rhs_b[:,l])
+        res -= np.real(np.conjugate(self.duds/self.rho)*\
+                    self.curve.arc_length_der(rhs_b/self.curve.zpabs[:,None])*self.curve.zpabs[:,None]) 
+        res += np.real(np.conjugate(self.kappa_in**2*self.ui/self.rho - self.kappa_ex**2*self.ui)*rhs_b)
             
-        adj = self.curve.adjoint_der_normal(sres)
+        adj = self.curve.adjoint_der_normal(np.sum(res,axis=1))
 
         return adj
     
