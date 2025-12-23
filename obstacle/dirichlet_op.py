@@ -8,7 +8,7 @@ from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc
+from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
 
 
 def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir):
@@ -85,19 +85,21 @@ class DirichletOp(Operator):
       Problems, 13 (1997) 1279–1299.
     """
 
-    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, N_FK=64):   
+    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, domain = None):   
         self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,codomain \
             = check_scattering_parameters(kappa,N_ieq,N_inc,N_meas)
 
-        self.N_FK = N_FK
-        """Number of Fourier coefficients."""
+        if domain is None:
+            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
+        else:
+            domain.n = 2*self.N_ieq
         self.w_sl=-1*complex(0,1)*self.kappa
         self.w_dl=1
         """Weights of single and double layer potentials. Use a mixed single and double layer potential ansatz with
         weights w_sl and w_dl."""
 
         super().__init__(
-            domain=GenTrigSpc(self.N_FK,2*N_ieq),
+            domain=domain,
             codomain=codomain,
             linear=False
         )

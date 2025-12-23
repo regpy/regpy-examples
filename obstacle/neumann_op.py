@@ -11,7 +11,7 @@ from regpy.operators import Operator
 
 #from regpy.vecsps.curve import StarCurveDiscr
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc
+from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
 
 class NeumannOp(Operator):
     r"""Operator that maps the shape of a sound-hard obstacle to the far-field measurements. 
@@ -35,17 +35,20 @@ class NeumannOp(Operator):
     - T. Hohage. "Convergence rates of a regularized Newton method in sound-hard inverse scattering", 
     SIAM journal on numerical analysis, 36 (1998): 125-142."""
 
-    def __init__(self, kappa, N_ieq=128, inc_waves=4, meas_dir=64, N_FK=64):
+    def __init__(self, kappa, N_ieq=128, inc_waves=4, meas_dir=64, domain=None):
         self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions, codomain \
             = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir)
-        self.N_FK = N_FK
-        """Number of Fourier coefficients."""
+ 
+        if domain is None:
+            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
+        else:
+            domain.n = 2*self.N_ieq
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
         """Weights of single and double layer potentials."""
 
         super().__init__(
-            domain=GenTrigSpc(self.N_FK,2*self.N_ieq),
+            domain=domain,
             codomain=codomain,
             linear=False
         )

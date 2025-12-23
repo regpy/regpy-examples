@@ -11,7 +11,7 @@ from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc
+from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
 
 
 class TransmissionOp(Operator):
@@ -34,7 +34,7 @@ class TransmissionOp(Operator):
     see T. Hohage & C. Schormann. "A Newton-type method for a transmission
     problem in inverse scattering", Inverse Problems, 14 (1998), 1207-1227."""
     
-    def __init__(self, kappa_in, kappa_ex, rho=4.3-6j, N_ieq=128, N_inc=4, N_meas=64, N_FK=64):
+    def __init__(self, kappa_in, kappa_ex, rho=4.3-6j, N_ieq=128, N_inc=4, N_meas=64, domain =None):
 
         self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,codomain \
             = check_scattering_parameters(kappa_ex,N_ieq,N_inc,N_meas)
@@ -50,11 +50,13 @@ class TransmissionOp(Operator):
         self.w_dl_in = -1
         """Weights of single and double layer potentials."""
         
-        self.N_FK = N_FK
-        """Number of Fourier coefficients."""
+        if domain is None:
+            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
+        else:
+            domain.n = 2*self.N_ieq
 
         super().__init__(
-            domain = GenTrigSpc(self.N_FK,2*self.N_ieq),
+            domain = domain,
             codomain = codomain,
             linear = False
         )
