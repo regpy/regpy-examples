@@ -46,7 +46,7 @@ class Potential(Operator):
       Problems, 13 (1997) 1279–1299.
     """
 
-    def __init__(self, radius, nforward=128, N_means=128, N_ieq=128):
+    def __init__(self, radius, nforward=128, N_means=128, N_quad=128):
         
         self.radius = radius
         """The measurement radius."""
@@ -54,7 +54,7 @@ class Potential(Operator):
         """The Fourier order of the forward solver."""
          
         super().__init__(
-            domain=StarTrigRadialFcts(2*N_ieq),
+            domain=StarTrigRadialFcts(nforward,N_quad),
             codomain=UniformGridFcts(np.linspace(0, 2*np.pi, N_means, endpoint=False), dtype=complex)
         )
 
@@ -66,11 +66,13 @@ class Potential(Operator):
         self.cos_fl = np.cos(k_tfl)
         self.sin_fl = np.sin(k_tfl)
 
-    def _eval(self, x, differentiate=False, adjoint_derivative=False):
+    def _eval(self, x, differentiate=True):
         nfwd = self.nforward
-        self._bd = self.domain.eval_curve(x, nvals=nfwd)
+        self.curve = self.domain.coeff2curve(x)
 
-        q = self._bd.radius[0]
+        q = self.curve.radial()
+        if differentiate:
+            self.q=q
         if q.max() >= self.radius:
             raise ValueError('Object penetrates measurement circle')
         if q.min() <= 0:
@@ -95,14 +97,13 @@ class Potential(Operator):
 
     def _derivative(self, h):
         nfwd = self.nforward
-        q = self._bd.radius[0]
-        qqh = q * self._bd.derivative(h)
+        qqh = self.q * self.curve.derivative_radial(h)
 
         der = 1 / (self.radius * nfwd) * np.sum(qqh) * self.codomain.ones()
         fac = 2 / (nfwd * self.radius)
         for j in range((nfwd - 1) // 2):
             fac /= self.radius
-            qqh *= q
+            qqh *= self.q
             der += fac * (
                 self.cos_fl[j, :] * np.sum(qqh * self.cosin[j, :]) +
                 self.sin_fl[j, :] * np.sum(qqh * self.sinus[j, :])
@@ -110,20 +111,19 @@ class Potential(Operator):
 
         if nfwd % 2 == 0:
             fac /= self.radius
-            qqh *= q
+            qqh *= self.q
             der += fac * self.cos_fl[nfwd // 2, :] * np.sum(qqh * self.cosin[nfwd // 2, :])
         return der
 
     def _adjoint(self, g):
         nfwd = self.nforward
-        q = self._bd.radius[0]
-        qq = q.copy()
+        qq = self.q.copy()
 
         adj = 1 / (self.radius * nfwd) * np.sum(g) * qq
         fac = 2 / (nfwd * self.radius)
         for j in range((nfwd - 1) // 2):
             fac /= self.radius
-            qq *= q
+            qq *= self.q
             adj += fac * (
                 np.sum(g * self.cos_fl[j, :]) * (self.cosin[j, :] * qq) +
                 np.sum(g * self.sin_fl[j, :]) * (self.sinus[j, :] * qq)
@@ -131,7 +131,7 @@ class Potential(Operator):
 
         if nfwd % 2 == 0:
             fac /= self.radius
-            qq *= q
+            qq *= self.q
             adj += fac * np.sum(g * self.cos_fl[nfwd // 2, :]) * (self.cosin[nfwd // 2, :] * qq)
 
-        return self._bd.adjoint(adj.real)
+        return self.curve.derivative_radial.adjoint(adj.real)   

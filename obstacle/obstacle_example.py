@@ -34,9 +34,7 @@ noise = noiselevel*setting.h_codomain.norm(farfield)/setting.h_codomain.norm(noi
 data = farfield+noise
 
 #Initial guess
-t = 2*np.pi*np.arange(0, op.N_FK)/op.N_FK
-init = 0.45*np.append(np.cos(t), np.sin(t)).reshape((2, op.N_FK))
-init = init.flatten()
+
 
 #Solver: NewtonCG or IrgnmCG
 solver = NewtonCG(
