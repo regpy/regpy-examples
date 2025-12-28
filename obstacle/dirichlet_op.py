@@ -8,10 +8,11 @@ from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
+from regpy.vecsps.curve import ParameterizedCurveSpc, StarTrigRadialFcts,GenCurve
+from regpy.util import Errors
 
 
-def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir):
+def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain):
     if not isinstance(kappa,(float,int,complex)) or not kappa.real>0:
         raise ValueError('kappa must be positive.')          
     if not isinstance(N_ieq,int):
@@ -41,8 +42,13 @@ def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir):
     inc_dir = [np.angle(complex(x,y)) for (x,y) in inc_directions]
     codomain=GridFcts(meas_dir, inc_dir, dtype=complex,use_cell_measure=True)
 
-    return kappa, N_ieq, N_inc, inc_directions, N_meas, meas_directions, codomain
-
+    if domain is None:
+        domain = StarTrigRadialFcts(dim=2*N_ieq,n=2*N_ieq)
+    else:
+        if not isinstance(domain,ParameterizedCurveSpc):
+            raise TypeError(Errors.not_instance(domain,ParameterizedCurveSpc))
+        domain.n = 2*N_ieq
+    return kappa, N_ieq, N_inc, inc_directions, N_meas, meas_directions, domain, codomain
 
 class DirichletOp(Operator):
     r"""Operator that maps the shape of a sound-soft obstacle to the far-field measurements. 
@@ -75,8 +81,8 @@ class DirichletOp(Operator):
         farfield measurement directions. Same format as inc_waves.
         kappa : complex
         Wave number.
-    N_FK : int
-        Number of Fourier coefficients.
+    domain: regpy.vecsps.curve.ParameterizedCurveSpc|None, optional
+        Domain of the operator. If None [default], it is chose as StarTrigRadialFcts with dim=2*N_ieq
 
     References
     ----------
@@ -85,14 +91,14 @@ class DirichletOp(Operator):
       Problems, 13 (1997) 1279–1299.
     """
 
-    def __init__(self, kappa, N_ieq=128, N_inc=4, N_meas=64, domain = None):   
-        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,codomain \
-            = check_scattering_parameters(kappa,N_ieq,N_inc,N_meas)
+    def __init__(self, kappa:complex, 
+                 N_ieq:int=128, 
+                 inc_waves: int | list[tuple[float]]=4, 
+                 meas_dir:  int | list[tuple[float]]=64, 
+                 domain: ParameterizedCurveSpc|None = None):   
+        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,domain, codomain \
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain)
 
-        if domain is None:
-            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
-        else:
-            domain.n = 2*self.N_ieq
         self.w_sl=-1*complex(0,1)*self.kappa
         self.w_dl=1
         """Weights of single and double layer potentials. Use a mixed single and double layer potential ansatz with
@@ -138,8 +144,9 @@ class DirichletOp(Operator):
         return FF_SL @ self.dudn
 
     def _derivative(self, h):
+        hn = self.curve.der_normal(h)
         rhs = -2*self.curve.zpabs[:,None] * np.ones(self.N_inc) 
-        rhs *= self.curve.der_normal(h)[:,np.newaxis]
+        rhs *= hn[:,np.newaxis]
         rhs = rhs * self.dudn
         phi =  scla.lu_solve((self.lu,self.piv), rhs)
 
@@ -151,15 +158,15 @@ class DirichletOp(Operator):
         res = np.sum((rhs*np.conjugate(self.dudn)).real,axis=1)
         res *= -2.*self.curve.zpabs
 
-        return self.curve.adjoint_der_normal(res)
+        return self.curve.der_normal.adjoint(res)
 
-    def create_synthetic_data(self, true_curve, N_ieq_synth=128):
+    def create_synthetic_data(self, true_curve :GenCurve | type, N_ieq_synth:int | None =None):
         """
         This alternative operator evaluation method is included to avoid inverse crimes. 
         In contrast to the _eval, a potential ansatz is chosen in the boundary integral equation method 
         rather than a direct ansatz. Moreover, a different discretization may be chosen.
         """
-        bd_ex = true_curve(2*N_ieq_synth,2)
+        bd_ex,N_ieq_synth = check_create_synthetic_data_params(true_curve,N_ieq_synth,nderivs=2,op=self)
         wdlTmp=1*self.w_dl
         self.w_dl=0
 
@@ -179,3 +186,23 @@ class DirichletOp(Operator):
         farfield = FF_combined @ phi
 
         return farfield, bd_ex
+    
+def check_create_synthetic_data_params(true_curve,N_ieq_synth,nderivs,op):
+    """
+    """
+    if not isinstance(nderivs,int):
+        raise TypeError(Errors.not_instance(nderivs,int))
+    if not isinstance(N_ieq_synth,int) and N_ieq_synth is not None:
+        raise TypeError(Errors.not_instance(N_ieq_synth,int))
+    if isinstance(true_curve,type):
+        N_ieq_synth=N_ieq_synth if N_ieq_synth is not None else op.N_ieq
+        curve = true_curve(2*N_ieq_synth,nderivs)
+    elif isinstance(true_curve,GenCurve):
+        curve =true_curve
+        if N_ieq_synth is not None:
+            curve.n = 2*N_ieq_synth
+        else:
+            N_ieq_synth = curve.n//2
+    else:
+        raise TypeError(Errors.generic_message(f"true_curve has unsuitable type {type(true_curve)}"))
+    return curve, N_ieq_synth

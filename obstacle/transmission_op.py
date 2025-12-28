@@ -1,17 +1,13 @@
 import numpy as np
 import scipy.linalg as scla
 
-from functions.operator import op_S
-from functions.operator import op_T
-from functions.operator import op_K
-from dirichlet_op import check_scattering_parameters
-
+from functions.operator import op_S, op_K, op_T
 from functions.farfield_matrix import farfield_matrix_trans
 from functions.setup_iop_data import setup_iop_data
+from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
+from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,peanut
 
-from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
 
 
 class TransmissionOp(Operator):
@@ -29,15 +25,28 @@ class TransmissionOp(Operator):
 
     where \rho\in\mathbb{C}\backslash 0, \(u=u_e+u^{inc}\) is the total field in \mathbb{R}^2\backslash\overline{D}.
 
+    Parameter:
+    ----------
+    kappa_in,kappa_ex: complex
+        interior and exterior wave number
+    rho: complex, optional
+        parameter in second transmission condition. Default: 2.
+    N_ieq,inc_waves,meas_dir,domain: 
+        see DiricheletOp
+
     References
     ----------
     see T. Hohage & C. Schormann. "A Newton-type method for a transmission
     problem in inverse scattering", Inverse Problems, 14 (1998), 1207-1227."""
     
-    def __init__(self, kappa_in, kappa_ex, rho=4.3-6j, N_ieq=128, N_inc=4, N_meas=64, domain =None):
+    def __init__(self, kappa_in:complex, kappa_ex:complex, rho:complex=2., 
+                 N_ieq:int =64, 
+                 inc_waves:int | list[tuple[float]]=4, 
+                 meas_dir:int | list[tuple[float]]=64, 
+                 domain:ParameterizedCurveSpc|None =None):
 
-        self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,codomain \
-            = check_scattering_parameters(kappa_ex,N_ieq,N_inc,N_meas)
+        self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,domain,codomain \
+            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,meas_dir,domain)
 
         self.kappa_in = kappa_in         
         """Interior wave number."""
@@ -49,11 +58,6 @@ class TransmissionOp(Operator):
         self.w_sl_in = rho 
         self.w_dl_in = -1
         """Weights of single and double layer potentials."""
-        
-        if domain is None:
-            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
-        else:
-            domain.n = 2*self.N_ieq
 
         super().__init__(
             domain = domain,
@@ -141,13 +145,16 @@ class TransmissionOp(Operator):
                     self.curve.arc_length_der(rhs_b/self.curve.zpabs[:,None])*self.curve.zpabs[:,None]) 
         res += np.real(np.conjugate(self.kappa_in**2*self.ui/self.rho - self.kappa_ex**2*self.ui)*rhs_b)
             
-        adj = self.curve.adjoint_der_normal(np.sum(res,axis=1))
+        adj = self.curve.der_normal.adjoint(np.sum(res,axis=1))
 
         return adj
     
 
-    def create_synthetic_data(self, true_curve, N_ieq_synth=64):
-        bd_ex = true_curve(2*N_ieq_synth,3)
+    def create_synthetic_data(self, 
+                              true_curve:GenCurve | type = peanut, 
+                              N_ieq_synth:int|None=None
+                              ):
+        bd_ex,N_ieq_synth = check_create_synthetic_data_params(true_curve,N_ieq_synth,nderivs=3,op=self)
 
         Iop_data_ex = setup_iop_data(bd_ex, self.kappa_ex)
         Iop_data_in = setup_iop_data(bd_ex, self.kappa_in)

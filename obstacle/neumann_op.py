@@ -1,17 +1,12 @@
 import numpy as np
 import scipy.linalg as scla
 
-from functions.operator import op_T
-from functions.operator import op_K
-from dirichlet_op import check_scattering_parameters
-
+from functions.operator import op_T, op_K
 from functions.farfield_matrix import farfield_matrix
 from functions.setup_iop_data import setup_iop_data
+from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
-
-#from regpy.vecsps.curve import StarCurveDiscr
-from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import GenTrigSpc, StarTrigRadialFcts
+from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,peanut
 
 class NeumannOp(Operator):
     r"""Operator that maps the shape of a sound-hard obstacle to the far-field measurements. 
@@ -28,21 +23,20 @@ class NeumannOp(Operator):
     where \(u=u^s+u^i\) is the total field and \(D\) is the bounded obstacle in \mathbb{R}^2 with \(\partial D\in\mathcal{C}^2\).
 
     Parameters: 
-    kappa, N_ieq, inc_waves, meas_dir: see DirichletOp
+    kappa, N_ieq, inc_waves, meas_dir,domain: see DirichletOp
  
     References
     ----------
     - T. Hohage. "Convergence rates of a regularized Newton method in sound-hard inverse scattering", 
     SIAM journal on numerical analysis, 36 (1998): 125-142."""
 
-    def __init__(self, kappa, N_ieq=128, inc_waves=4, meas_dir=64, domain=None):
-        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions, codomain \
-            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir)
+    def __init__(self, kappa:complex, N_ieq:int=64, 
+                 inc_waves:int | list[tuple[float]]=4, 
+                 meas_dir:int | list[tuple[float]]=64, 
+                 domain: ParameterizedCurveSpc|None=None):
+        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions, domain, codomain \
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain)
  
-        if domain is None:
-            domain = StarTrigRadialFcts(dim=2*self.N_ieq,n=2*self.N_ieq)
-        else:
-            domain.n = 2*self.N_ieq
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
         """Weights of single and double layer potentials."""
@@ -110,16 +104,18 @@ class NeumannOp(Operator):
         res = np.sum(rhs,axis=1)
         res *= 2.*self.curve.zpabs
 
-        return self.curve.adjoint_der_normal(res)
+        return self.curve.der_normal.adjoint(res)
 
-    def create_synthetic_data(self, true_curve, N_ieq_synth=128):
+    def create_synthetic_data(self, 
+                              true_curve:GenCurve = peanut, 
+                              N_ieq_synth:int|None=None):
         """
         This alternative operator evaluation method is included to avoid inverse crimes. 
         In contrast to the _eval, a potential ansatz is chosen in the boundary integral equation method 
         rather than a direct ansatz. Moreover, a different discretization may be chosen.
         """
-        bd_ex = true_curve(2*N_ieq_synth,3)
-        
+        bd_ex,N_ieq_synth = check_create_synthetic_data_params(true_curve,N_ieq_synth,nderivs=3,op=self)
+              
         Iop_data = setup_iop_data(bd_ex, self.kappa)
 
         Iop = self.w_dl*(op_T(bd_ex, Iop_data)) if self.w_dl!=0 \
