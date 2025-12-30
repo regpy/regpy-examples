@@ -97,7 +97,7 @@ class Potential(Operator):
 
     def _derivative(self, h):
         nfwd = self.nforward
-        qqh = self.q * self.curve.derivative_radial(h)
+        qqh = self.q * self.curve.vecsp.der_op(0)(h)
 
         der = 1 / (self.radius * nfwd) * np.sum(qqh) * self.codomain.ones()
         fac = 2 / (nfwd * self.radius)
@@ -134,4 +134,4 @@ class Potential(Operator):
             qq *= self.q
             adj += fac * np.sum(g * self.cos_fl[nfwd // 2, :]) * (self.cosin[nfwd // 2, :] * qq)
 
-        return self.curve.derivative_radial.adjoint(adj.real)   
+        return self.curve.vecsp.der_op(0).adjoint(adj.real)   
