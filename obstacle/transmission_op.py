@@ -31,7 +31,7 @@ class TransmissionOp(Operator):
         interior and exterior wave number
     rho: complex, optional
         parameter in second transmission condition. Default: 2.
-    N_ieq,inc_waves,meas_dir,domain: 
+    N_ieq,inc_waves,R_inc,meas_dir,R_meas,domain: 
         see DiricheletOp
 
     References
@@ -42,11 +42,18 @@ class TransmissionOp(Operator):
     def __init__(self, kappa_in:complex, kappa_ex:complex, rho:complex=2., 
                  N_ieq:int =64, 
                  inc_waves:int | list[tuple[float]]=4, 
-                 meas_dir:int | list[tuple[float]]=64, 
+                 R_inc:float = np.inf,
+                 meas:int | list[tuple[float]]=64, 
+                 R_meas:float = np.inf,
                  domain:ParameterizedCurveSpc|None =None):
 
-        self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,domain,codomain \
-            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,meas_dir,domain)
+        self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc,\
+            self.N_meas, self.meas_pts,self.R_meas,domain,codomain \
+            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
+        if self.R_meas!=np.inf:
+            raise ValueError('Only the case of farfield data is implemented so far.')
+        if self.R_inc!=np.inf:
+            raise ValueError('Only the case of plane incident fields is implemented so far, no point sources.')            
 
         self.kappa_in = kappa_in         
         """Interior wave number."""
@@ -93,13 +100,13 @@ class TransmissionOp(Operator):
 
         self.Iop = np.linalg.inv(Iop).dot(R)
 
-        self.FF_combined = farfield_matrix_trans(self.curve, self.meas_directions,\
+        self.FF_combined = farfield_matrix_trans(self.curve, self.meas_pts,\
                                     self.kappa_ex, self.w_sl_ex, self.w_dl_ex)
 
         uinc     = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
         duincdnu = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
 
-        for l, dir in enumerate(self.inc_directions):
+        for l, dir in enumerate(self.inc_pts):
             uinc[:, l] = (np.exp(1*complex(0,1)*self.kappa_ex*dir.dot(self.curve.z))).T
 
             duincdnu[:, l] = np.exp(1*complex(0,1)*self.kappa_ex*dir.dot(self.curve.z))*\
@@ -177,12 +184,12 @@ class TransmissionOp(Operator):
 
         Iop = np.linalg.inv(Iop).dot(R)
 
-        FF_combined = farfield_matrix_trans(bd_ex, self.meas_directions, self.kappa_ex, self.w_sl_ex, self.w_dl_ex)
+        FF_combined = farfield_matrix_trans(bd_ex, self.meas_pts, self.kappa_ex, self.w_sl_ex, self.w_dl_ex)
 
         rhs_a  = np.zeros((2*N_ieq_synth, self.N_inc), dtype=complex)
         rhs_b = np.zeros((2*N_ieq_synth, self.N_inc), dtype=complex)
 
-        for l, dir in enumerate(self.inc_directions):
+        for l, dir in enumerate(self.inc_pts):
             rhs_a[:,l] = np.exp(complex(0,1)*self.kappa_ex*dir.dot(bd_ex.z))
             rhs_b[:,l] = np.exp(complex(0,1)*self.kappa_ex*dir.dot(bd_ex.z))\
                 *(complex(0,1)*self.kappa_ex*(dir.dot(bd_ex.normal)))/bd_ex.zpabs

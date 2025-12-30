@@ -1,10 +1,11 @@
 import numpy as np
 import scipy.linalg as scla
+from scipy.special import hankel1
 import os
 import sys
 sys.path.append(os.path.dirname(__file__))
 from functions.operator import op_S, op_K
-from functions.farfield_matrix import farfield_matrix
+from functions.farfield_matrix import farfield_matrix,nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 from regpy.vecsps import GridFcts
@@ -12,35 +13,41 @@ from regpy.vecsps.curve import ParameterizedCurveSpc, StarTrigRadialFcts,GenCurv
 from regpy.util import Errors
 
 
-def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain):
+def check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas_dir,R_meas,domain):
     if not isinstance(kappa,(float,int,complex)) or not kappa.real>0:
         raise ValueError('kappa must be positive.')          
     if not isinstance(N_ieq,int):
         raise ValueError('N_ieq must be integer.')
+    if not isinstance(R_inc,(float,int)):
+        raise TypeError(f'R_inc must be a float. Got {R_inc}.')
     if isinstance(inc_waves, int) and inc_waves > 0:
         N_inc = inc_waves
         t=2*np.pi*(np.arange(0, N_inc)/N_inc-0.5)
-        inc_directions=[np.array([np.cos(s), np.sin(s)]) for s in t]
+        R = R_inc if R_inc<np.inf else 1.
+        inc_pts=R*np.vstack((np.cos(t), np.sin(t))).T
     elif isinstance(inc_waves, list) and all([dir.shape == (2,) and dir[0]**2+dir[1]**2==1. \
                                                 for dir in inc_waves]):
         N_inc = len(inc_waves)
-        inc_directions = inc_waves 
+        inc_pts = inc_waves 
     else: 
-        raise ValueError("Incident direction neither an array of direction nor a positive integer")
+        raise ValueError(f"Incident direction neither an array of direction nor a positive integer. Got {inc_waves}")
 
+    if not isinstance(R_meas,(float,int)):
+        raise TypeError(f'R_meas must be a float. Got {R_meas}.')
     if isinstance(meas_dir, int) and meas_dir > 0:
         N_meas = meas_dir
         t=2*np.pi*(np.arange(0, N_meas)/N_meas-0.5)
-        meas_directions=[np.array([np.cos(s), np.sin(s)]) for s in t]
+        R = R_meas if R_meas<np.inf else 1.
+        meas_pts=R*np.vstack((np.cos(t), np.sin(t))).T
     elif isinstance(meas_dir, list) and all([meas.shape == (2,) and meas[0]**2 + meas[1]**2==1 \
                                                 for meas in meas_dir]):
         N_meas = len(meas_dir)
-        meas_directions = meas_dir 
+        meas_pts = meas_dir 
     else: 
         raise ValueError("Measurement direction neither an arry of direction nor a positive integer")
-    meas_dir = [np.angle(complex(x,y)) for (x,y) in meas_directions]
-    inc_dir = [np.angle(complex(x,y)) for (x,y) in inc_directions]
-    codomain=GridFcts(meas_dir, inc_dir, dtype=complex,use_cell_measure=True)
+    meas_grid = np.angle(meas_pts[:,0]+1j*meas_pts[:,1]) if isinstance(meas_dir,int) else np.arange(meas_dir.shape[0])
+    inc_grid = np.angle(inc_pts[:,0]+1j*inc_pts[:,1]) if isinstance(inc_waves,int) else np.arange(inc_waves.shape[0])
+    codomain=GridFcts(meas_grid, inc_grid, dtype=complex,use_cell_measure=True)
 
     if domain is None:
         domain = StarTrigRadialFcts(dim=2*N_ieq,n=2*N_ieq)
@@ -48,7 +55,7 @@ def check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain):
         if not isinstance(domain,ParameterizedCurveSpc):
             raise TypeError(Errors.not_instance(domain,ParameterizedCurveSpc))
         domain.n = 2*N_ieq
-    return kappa, N_ieq, N_inc, inc_directions, N_meas, meas_directions, domain, codomain
+    return kappa, N_ieq, N_inc, inc_pts, R_inc, N_meas, meas_pts, R_meas, domain, codomain
 
 class DirichletOp(Operator):
     r"""Operator that maps the shape of a sound-soft obstacle to the far-field measurements. 
@@ -74,12 +81,23 @@ class DirichletOp(Operator):
         wave number
     N_ieq: int [default: 128]
         boundary integral equation matrix is of size (2*N_ieq)^2
-    inc_waves: int or list of tuples of reals [default: 4]
-        directions of incident waves. If int these are chosen equidistant on the unit circle. 
-        If a list of tuples, each tuple must lie on the unit circle
-    meas_dir: int or list of tuples of reals [default: 64]
-        farfield measurement directions. Same format as inc_waves.
-        kappa : complex
+    inc_waves: int or np.ndarray, optional
+        Determines the incident waves. Defaults to 4. If an integer, the incident directions 
+        (for R_inc=np.inf) or the source points of the incident waves (for R_inc<np.inf) are chosen equidistant, in the latter case on a circle of radiaus R_inc.
+        If inc_waves is a 2xN_inc matrix, it determines the directions of the incident waves
+        (if R_inc==np.inf -- in this case each rows must lie on the unit circle) or the locations 
+        of the source points (if R_inc<np.inf -- in this case the value of R_inc does not matter). 
+    R_inc: float, optional
+        Determines if plane incident waves (R_inc = np.inf) are used or point sources. Defaults to np.inf. 
+    meas: int or list of tuples of floats, optional
+        If an integer, it determines the number of measurement directions (R_meas==np.inf) or 
+        measurement points, which are then chosen equidistant, for R_meas<np.inf on the circle 
+        of radius R_meas. Defaults to 64.
+        If a 2xN_meas matrix, its rows contain the measurement directions (R_meas==np.inf) 
+        or the measurement points (R_meas<np.inf -- in this case the value of R_meas does not matter).
+    R_meas: float, optional
+        Determines if farfield data (R_meas==np.inf) or near field data are used. Defaults to np.inf.
+    kappa : complex
         Wave number.
     domain: regpy.vecsps.curve.ParameterizedCurveSpc|None, optional
         Domain of the operator. If None [default], it is chose as StarTrigRadialFcts with dim=2*N_ieq
@@ -93,11 +111,17 @@ class DirichletOp(Operator):
 
     def __init__(self, kappa:complex, 
                  N_ieq:int=128, 
-                 inc_waves: int | list[tuple[float]]=4, 
-                 meas_dir:  int | list[tuple[float]]=64, 
+                 inc_waves: int | list[tuple[float]]=4,
+                 R_inc: float = np.inf, 
+                 meas:  int | list[tuple[float]]=64, 
+                 R_meas: float = np.inf,
                  domain: ParameterizedCurveSpc|None = None):   
-        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions,domain, codomain \
-            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain)
+        self.kappa,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc, \
+            self.N_meas, self.meas_pts, self.R_meas, \
+            domain, codomain \
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
+        if self.R_inc!=np.inf:
+            raise ValueError('Case of point sources does not work, yet!')
 
         self.w_sl=-1*complex(0,1)*self.kappa
         self.w_dl=1
@@ -123,20 +147,27 @@ class DirichletOp(Operator):
         # LU-factorization of integral operator matrix
         self.lu, self.piv = scla.lu_factor(Iop)
 
-        # Assemble far field operator matrix for operator application
-        FF_SL = farfield_matrix(self.curve,self.meas_directions,self.kappa,-1.,0.)
+        # Assemble far or near field operator matrix for operator application
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        FF_SL = matrix_fct(self.curve,self.meas_pts,self.kappa,-1.,0.)
         
         if differentiate:
-            # Assemble far field operator matrix
-            self.FF_combined = farfield_matrix(self.curve,self.meas_directions,self.kappa, \
+            # Assemble far or near field operator matrix for the combined potential
+            self.FF_combined = matrix_fct(self.curve,self.meas_pts,self.kappa, \
                                                self.w_sl,self.w_dl)        
    
         # Assemble right hand sides
         rhs = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
-        for l, dir in enumerate(self.inc_directions):
-            rhs[:,l] = 2*np.exp(complex(0,1)*self.kappa*dir.dot(self.curve.z))*  \
-                (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.curve.normal) \
+        for l, dir in enumerate(self.inc_pts):
+            if self.R_inc == np.inf:
+                rhs[:,l] = 2*np.exp(1j*self.kappa*dir.dot(self.curve.z))*  \
+                    (self.w_dl*1j*self.kappa*dir.dot(self.curve.normal) \
                                          +self.w_sl*self.curve.zpabs)
+            else:
+                kdiff = self.kappa*(self.curve.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0)
+                rhs[:,l] = 0.5j*self.w_sl*self.curve.zpabs*hankel1(0,kdist) \
+                    - 0.5j*self.w_dl*np.sum(kdiff*self.curve.normal,axis=0) * hankel1(1,kdist) 
             
         self.dudn = scla.lu_solve((self.lu,self.piv), rhs,trans=1)
         """Normal derivative of total field at boundary."""
@@ -176,12 +207,19 @@ class DirichletOp(Operator):
         if self.w_dl!=0:
             Iop += self.w_dl*(np.diag(bd_ex.zpabs) + op_K(bd_ex, Iop_data))
             
-        FF_combined = farfield_matrix(bd_ex, self.meas_directions, self.kappa, self.w_sl, self.w_dl)
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        FF_combined = matrix_fct(bd_ex, self.meas_pts, self.kappa, self.w_sl, self.w_dl)
         self.w_dl=wdlTmp
 
         rhs = np.zeros((2*N_ieq_synth,self.N_inc),dtype=complex)
-        for l, dir in enumerate(self.inc_directions):
-            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*bd_ex.zpabs
+        for l, dir in enumerate(self.inc_pts):
+            if self.R_inc == np.inf:
+                rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*bd_ex.zpabs
+            else:
+                kdiff = self.kappa*(bd_ex.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0)
+                rhs[:,l] = -0.5j*self.w_sl*bd_ex.zpabs*hankel1(0,kdist) 
+
         phi = scla.solve(Iop, rhs)
         farfield = FF_combined @ phi
 

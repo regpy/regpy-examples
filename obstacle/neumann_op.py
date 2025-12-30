@@ -2,7 +2,7 @@ import numpy as np
 import scipy.linalg as scla
 
 from functions.operator import op_T, op_K
-from functions.farfield_matrix import farfield_matrix
+from functions.farfield_matrix import farfield_matrix, nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
@@ -23,20 +23,27 @@ class NeumannOp(Operator):
     where \(u=u^s+u^i\) is the total field and \(D\) is the bounded obstacle in \mathbb{R}^2 with \(\partial D\in\mathcal{C}^2\).
 
     Parameters: 
-    kappa, N_ieq, inc_waves, meas_dir,domain: see DirichletOp
+    kappa, N_ieq, inc_waves, R_inc, meas_dir,R_meas,domain: see DirichletOp
  
     References
     ----------
     - T. Hohage. "Convergence rates of a regularized Newton method in sound-hard inverse scattering", 
     SIAM journal on numerical analysis, 36 (1998): 125-142."""
 
-    def __init__(self, kappa:complex, N_ieq:int=64, 
-                 inc_waves:int | list[tuple[float]]=4, 
-                 meas_dir:int | list[tuple[float]]=64, 
-                 domain: ParameterizedCurveSpc|None=None):
-        self.kappa,  self.N_ieq, self.N_inc, self.inc_directions, self.N_meas, self.meas_directions, domain, codomain \
-            = check_scattering_parameters(kappa,N_ieq,inc_waves,meas_dir,domain)
- 
+    def __init__(self, kappa:complex, 
+                 N_ieq:int=128, 
+                 inc_waves: int | list[tuple[float]]=4,
+                 R_inc: float = np.inf, 
+                 meas:  int | list[tuple[float]]=64, 
+                 R_meas: float = np.inf,
+                 domain: ParameterizedCurveSpc|None = None):   
+        self.kappa,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc, \
+            self.N_meas, self.meas_pts, self.R_meas, \
+            domain, codomain \
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
+        if R_inc!=np.inf:
+            raise ValueError('Only the case of plane incident wave is implemented so far, no point sources.')
+
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
         """Weights of single and double layer potentials."""
@@ -60,17 +67,18 @@ class NeumannOp(Operator):
         # LU-factorization of integral operator matrix
         self.lu, self.piv = scla.lu_factor(Iop)
 
-        # assemble far-field matrices
-        FF_DL = farfield_matrix(self.curve, self.meas_directions, self.kappa, 0, 1)
+        # assemble far- or near-field matrices
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        FF_DL = matrix_fct(self.curve, self.meas_pts, self.kappa, 0, 1)
         if differentiate:        
-           self.FF_combined = farfield_matrix(self.curve, self.meas_directions, self.kappa,\
+           self.FF_combined = matrix_fct(self.curve, self.meas_pts, self.kappa,\
                                            self.w_sl, self.w_dl)
 
         # assemble right-hand sides    
         rhs = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
-        for l, dir in enumerate(self.inc_directions):
-            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(self.curve.z))*\
-                (self.w_dl*complex(0,1)*self.kappa*dir.dot(self.curve.normal)\
+        for l, dir in enumerate(self.inc_pts):
+            rhs[:,l] = -2*np.exp(1j*self.kappa*dir.dot(self.curve.z))*\
+                (self.w_dl*1j*self.kappa*dir.dot(self.curve.normal)\
                                          +self.w_sl*self.curve.zpabs)
         self.u =  scla.lu_solve((self.lu,self.piv), rhs,trans=1)
         """total field at boundary."""
@@ -123,10 +131,11 @@ class NeumannOp(Operator):
         if self.w_sl!=0:
             Iop += self.w_sl*(op_K(bd_ex, Iop_data).T-np.diag(bd_ex.zpabs))
     
-        FF_combined = farfield_matrix(bd_ex, self.meas_directions, self.kappa, self.w_sl, self.w_dl)
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        FF_combined = matrix_fct(bd_ex, self.meas_pts, self.kappa, self.w_sl, self.w_dl)
 
         rhs = np.zeros((2*N_ieq_synth,self.N_inc),dtype=complex)
-        for l, dir in enumerate(self.inc_directions):
+        for l, dir in enumerate(self.inc_pts):
             rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*(complex(0,1)*self.kappa*dir.dot(bd_ex.normal))
         
         phi = scla.solve(Iop, rhs)
