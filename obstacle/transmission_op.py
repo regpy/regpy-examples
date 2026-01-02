@@ -6,9 +6,7 @@ from functions.farfield_matrix import farfield_matrix_trans
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
-from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,peanut
-
-
+from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,Peanut
 
 class TransmissionOp(Operator):
     r"""Operator that maps an admissible boundary \partial D onto the corresponding far field pattern. 
@@ -158,7 +156,7 @@ class TransmissionOp(Operator):
     
 
     def create_synthetic_data(self, 
-                              true_curve:GenCurve | type = peanut, 
+                              true_curve:GenCurve | type = Peanut, 
                               N_ieq_synth:int|None=None
                               ):
         bd_ex,N_ieq_synth = check_create_synthetic_data_params(true_curve,N_ieq_synth,nderivs=3,op=self)

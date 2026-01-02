@@ -6,7 +6,7 @@ from functions.farfield_matrix import farfield_matrix, nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
-from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,peanut
+from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,Peanut
 
 class NeumannOp(Operator):
     r"""Operator that maps the shape of a sound-hard obstacle to the far-field measurements. 
@@ -115,7 +115,7 @@ class NeumannOp(Operator):
         return self.curve.der_normal.adjoint(res)
 
     def create_synthetic_data(self, 
-                              true_curve:GenCurve = peanut, 
+                              true_curve:GenCurve = Peanut, 
                               N_ieq_synth:int|None=None):
         """
         This alternative operator evaluation method is included to avoid inverse crimes. 

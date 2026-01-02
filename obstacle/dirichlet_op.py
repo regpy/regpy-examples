@@ -9,7 +9,7 @@ from functions.farfield_matrix import farfield_matrix,nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from regpy.operators import Operator
 from regpy.vecsps import GridFcts
-from regpy.vecsps.curve import ParameterizedCurveSpc, StarTrigRadialFcts,GenCurve
+from regpy.vecsps.curve import ParameterizedCurveSpc, StarTrigRadialFcts,GenCurve, Peanut
 from regpy.util import Errors
 
 
@@ -191,7 +191,7 @@ class DirichletOp(Operator):
 
         return self.curve.der_normal.adjoint(res)
 
-    def create_synthetic_data(self, true_curve :GenCurve | type, N_ieq_synth:int | None =None):
+    def create_synthetic_data(self, true_curve :GenCurve | type = Peanut, N_ieq_synth:int | None =None):
         """
         This alternative operator evaluation method is included to avoid inverse crimes. 
         In contrast to the _eval, a potential ansatz is chosen in the boundary integral equation method 
