@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg as scla
+from scipy.special import hankel1
 
 from functions.operator import op_T, op_K
 from functions.farfield_matrix import farfield_matrix, nearfield_matrix
@@ -41,8 +42,6 @@ class NeumannOp(Operator):
             self.N_meas, self.meas_pts, self.R_meas, \
             domain, codomain \
             = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
-        if R_inc!=np.inf:
-            raise ValueError('Only the case of plane incident wave is implemented so far, no point sources.')
 
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
@@ -77,9 +76,15 @@ class NeumannOp(Operator):
         # assemble right-hand sides    
         rhs = np.zeros((2*self.N_ieq,self.N_inc),dtype=complex)
         for l, dir in enumerate(self.inc_pts):
-            rhs[:,l] = -2*np.exp(1j*self.kappa*dir.dot(self.curve.z))*\
-                (self.w_dl*1j*self.kappa*dir.dot(self.curve.normal)\
-                                         +self.w_sl*self.curve.zpabs)
+            if self.R_inc == np.inf:
+                rhs[:,l] = -2*np.exp(1j*self.kappa*dir.dot(self.curve.z))*\
+                    (self.w_dl*1j*self.kappa*dir.dot(self.curve.normal)\
+                                             +self.w_sl*self.curve.zpabs)
+            else:
+                kdiff = self.kappa*(self.curve.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0)              
+                rhs[:,l] = -0.5j*self.w_sl*self.curve.zpabs*hankel1(0,kdist) \
+                    + 0.5j*self.w_dl*self.kappa*np.sum(kdiff*self.curve.normal,axis=0) * hankel1(1,kdist)/kdist                 
         self.u =  scla.lu_solve((self.lu,self.piv), rhs,trans=1)
         """total field at boundary."""
 
@@ -136,7 +141,12 @@ class NeumannOp(Operator):
 
         rhs = np.zeros((2*N_ieq_synth,self.N_inc),dtype=complex)
         for l, dir in enumerate(self.inc_pts):
-            rhs[:,l] = -2*np.exp(complex(0,1)*self.kappa*dir.dot(bd_ex.z))*(complex(0,1)*self.kappa*dir.dot(bd_ex.normal))
+            if self.R_inc == np.inf:
+                rhs[:,l] = -2*np.exp(1j*self.kappa*dir.dot(bd_ex.z))*(1j*self.kappa*dir.dot(bd_ex.normal))
+            else:
+                kdiff = self.kappa*(bd_ex.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0)              
+                rhs[:,l] = 0.5j*self.w_dl*self.kappa*np.sum(kdiff*bd_ex.normal,axis=0) * hankel1(1,kdist)/kdist  
         
         phi = scla.solve(Iop, rhs)
         farfield=FF_combined @ phi 

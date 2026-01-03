@@ -1,8 +1,9 @@
 import numpy as np
 import scipy.linalg as scla
+from scipy.special import hankel1
 
 from functions.operator import op_S, op_K, op_T
-from functions.farfield_matrix import farfield_matrix_trans
+from functions.farfield_matrix import farfield_matrix_trans, farfield_matrix,nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
@@ -39,19 +40,15 @@ class TransmissionOp(Operator):
     
     def __init__(self, kappa_in:complex, kappa_ex:complex, rho:complex=2., 
                  N_ieq:int =64, 
-                 inc_waves:int | list[tuple[float]]=4, 
+                 inc_waves:int | np.ndarray=4, 
                  R_inc:float = np.inf,
-                 meas:int | list[tuple[float]]=64, 
+                 meas:int |np.ndarray=64, 
                  R_meas:float = np.inf,
                  domain:ParameterizedCurveSpc|None =None):
 
         self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc,\
             self.N_meas, self.meas_pts,self.R_meas,domain,codomain \
-            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
-        if self.R_meas!=np.inf:
-            raise ValueError('Only the case of farfield data is implemented so far.')
-        if self.R_inc!=np.inf:
-            raise ValueError('Only the case of plane incident fields is implemented so far, no point sources.')            
+            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,R_inc,meas,R_meas,domain)            
 
         self.kappa_in = kappa_in         
         """Interior wave number."""
@@ -98,18 +95,25 @@ class TransmissionOp(Operator):
 
         self.Iop = np.linalg.inv(Iop).dot(R)
 
-        self.FF_combined = farfield_matrix_trans(self.curve, self.meas_pts,\
-                                    self.kappa_ex, self.w_sl_ex, self.w_dl_ex)
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        field_mat_a = matrix_fct(self.curve, self.meas_pts, self.kappa_ex, 0., self.w_dl_ex)
+        field_mat_b = matrix_fct(self.curve, self.meas_pts, self.kappa_ex, self.w_sl_ex, 0.)
+        self.FF_combined = np.hstack((field_mat_a,field_mat_b))
 
         uinc     = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
         duincdnu = np.zeros((2*self.N_ieq, self.N_inc), dtype=complex)
 
         for l, dir in enumerate(self.inc_pts):
-            uinc[:, l] = (np.exp(1*complex(0,1)*self.kappa_ex*dir.dot(self.curve.z))).T
-
-            duincdnu[:, l] = np.exp(1*complex(0,1)*self.kappa_ex*dir.dot(self.curve.z))*\
-                     (complex(0,1)*self.kappa_ex*dir.dot(self.curve.normal))/self.curve.zpabs
-            
+            if self.R_inc== np.inf:
+                uinc[:, l] = np.exp(1j*self.kappa_ex*dir.dot(self.curve.z))
+                duincdnu[:, l] = np.exp(1*1j*self.kappa_ex*dir.dot(self.curve.z))*\
+                     (1j*self.kappa_ex*dir.dot(self.curve.normal))/self.curve.zpabs
+            else:
+                kdiff = self.kappa_ex*(self.curve.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0) 
+                uinc[:, l] = 0.25j*self.curve.zpabs*hankel1(0,kdist)
+                duincdnu[:, l] = -0.25j*self.kappa_ex*np.sum(kdiff*self.curve.normal,axis=0) \
+                    * hankel1(1,kdist)/(kdist*self.curve.zpabs)       
         rhs = np.vstack((uinc, duincdnu))
             
         self.dudn = self.Iop @ rhs
@@ -138,7 +142,7 @@ class TransmissionOp(Operator):
         return self.FF_combined @ phi
 
     def _adjoint(self, g):
-        res = complex(0,1)*np.zeros(2*self.N_ieq)
+        res = 1j*np.zeros(2*self.N_ieq)
         phi = self.FF_combined.T.conj() @ g 
         rhs   = self.Iop.T.conj() @ phi
 
@@ -182,15 +186,25 @@ class TransmissionOp(Operator):
 
         Iop = np.linalg.inv(Iop).dot(R)
 
-        FF_combined = farfield_matrix_trans(bd_ex, self.meas_pts, self.kappa_ex, self.w_sl_ex, self.w_dl_ex)
+        matrix_fct = farfield_matrix if self.R_meas == np.inf else nearfield_matrix
+        field_mat_a = matrix_fct(bd_ex, self.meas_pts, self.kappa_ex, 0., self.w_dl_ex)
+        field_mat_b = matrix_fct(bd_ex, self.meas_pts, self.kappa_ex, self.w_sl_ex, 0.)
+        FF_combined = np.hstack((field_mat_a,field_mat_b))
 
         rhs_a  = np.zeros((2*N_ieq_synth, self.N_inc), dtype=complex)
         rhs_b = np.zeros((2*N_ieq_synth, self.N_inc), dtype=complex)
 
         for l, dir in enumerate(self.inc_pts):
-            rhs_a[:,l] = np.exp(complex(0,1)*self.kappa_ex*dir.dot(bd_ex.z))
-            rhs_b[:,l] = np.exp(complex(0,1)*self.kappa_ex*dir.dot(bd_ex.z))\
-                *(complex(0,1)*self.kappa_ex*(dir.dot(bd_ex.normal)))/bd_ex.zpabs
+            if self.R_inc==np.inf:
+                rhs_a[:,l] = np.exp(1j*self.kappa_ex*dir.dot(bd_ex.z))
+                rhs_b[:,l] = np.exp(1j*self.kappa_ex*dir.dot(bd_ex.z))\
+                    *(1j*self.kappa_ex*(dir.dot(bd_ex.normal)))/bd_ex.zpabs
+            else:
+                kdiff = self.kappa_ex*(bd_ex.z - dir[:,None])
+                kdist = np.linalg.norm(kdiff,axis=0) 
+                rhs_a[:, l] = 0.25j*bd_ex.zpabs*hankel1(0,kdist)
+                rhs_b[:, l] = -0.25j*self.kappa_ex*np.sum(kdiff*bd_ex.normal,axis=0) \
+                    * hankel1(1,kdist)/(kdist*bd_ex.zpabs)                      
         rhs = np.vstack((rhs_a, rhs_b))
 
         return FF_combined @ (Iop @ rhs), bd_ex
