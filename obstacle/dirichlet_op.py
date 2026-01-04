@@ -13,7 +13,7 @@ from regpy.vecsps.curve import ParameterizedCurveSpc, StarTrigRadialFcts,GenCurv
 from regpy.util import Errors
 
 
-def check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas_dir,R_meas,domain):
+def check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas_dir,R_meas,domain,codomain):
     if not isinstance(kappa,(float,int,complex)) or not kappa.real>0:
         raise ValueError('kappa must be positive.')          
     if not isinstance(N_ieq,int):
@@ -45,12 +45,21 @@ def check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas_dir,R_meas,doma
         meas_pts = meas_dir.T 
     else: 
         raise ValueError(ValueError(f"meas_dir neither a 2x... real np.ndarray  nor a positive integer:{meas_dir}"))
-    if isinstance(inc_waves,int) and isinstance(meas_dir,int) and inc_waves>1 and meas_dir>1:
-        meas_grid = np.angle(meas_pts[:,0]+1j*meas_pts[:,1]) if isinstance(meas_dir,int) else np.arange(len(meas_dir))
-        inc_grid = np.angle(inc_pts[:,0]+1j*inc_pts[:,1]) if isinstance(inc_waves,int) else np.arange(len(inc_waves))
+    if codomain is None:
+        if isinstance(meas_dir,int) or R_meas==np.inf:
+            meas_grid = np.unwrap(np.angle(meas_pts[:,0]+1j*meas_pts[:,1]))
+        else:
+            meas_grid = np.arange(N_meas)
+        if isinstance(inc_waves,int) or R_inc==np.inf: 
+            inc_grid = np.unwrap(np.angle(inc_pts[:,0]+1j*inc_pts[:,1]))
+        else:
+            inc_grid = np.arange(N_inc)
         codomain=GridFcts(meas_grid, inc_grid, dtype=complex,use_cell_measure=True)
     else:
-        codomain = MeasureSpaceFcts(dtype=complex,measure=np.ones((N_meas,N_inc)))
+        if not isinstance(codomain,GridFcts):
+            raise TypeError(Errors.type_error('codomain must be GridFcts.',codomain))
+        if not np.isdtype(codomain.dtype,np.complexfloating) or codomain.shape != (N_meas,N_inc):
+            raise ValueError(Errors.value_error(f'codoamin must be complex of shape (N_meas,N_inc). Got {codomain}, {(N_meas,N_inc)}'))
 
     if domain is None:
         domain = StarTrigRadialFcts(dim=2*N_ieq,n=2*N_ieq)
@@ -104,6 +113,10 @@ class DirichletOp(Operator):
         Wave number.
     domain: regpy.vecsps.curve.ParameterizedCurveSpc|None, optional
         Domain of the operator. If None [default], it is chose as StarTrigRadialFcts with dim=2*N_ieq
+    codomain: regpy.vecspc.GridFcts|None, optional
+        Codomain of the operator. If None [default], the codomain is constructed at initialization.
+        codomain must have two axes with lengths corresponding to the number of measurement points and 
+        the number of incident waves, respectively. 
 
     References
     ----------
@@ -118,11 +131,12 @@ class DirichletOp(Operator):
                  R_inc: float = np.inf, 
                  meas:  int | list[tuple[float]]=64, 
                  R_meas: float = np.inf,
-                 domain: ParameterizedCurveSpc|None = None):   
+                 domain: ParameterizedCurveSpc|None = None,
+                 codomain: MeasureSpaceFcts|None = None):   
         self.kappa,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc, \
             self.N_meas, self.meas_pts, self.R_meas, \
             domain, codomain \
-            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain,codomain)
         #if self.R_inc!=np.inf:
         #    raise ValueError('Case of point sources does not work, yet!')
 

@@ -3,11 +3,11 @@ import scipy.linalg as scla
 from scipy.special import hankel1
 
 from functions.operator import op_S, op_K, op_T
-from functions.farfield_matrix import farfield_matrix_trans, farfield_matrix,nearfield_matrix
+from functions.farfield_matrix import farfield_matrix,nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
-from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,Peanut
+from regpy.vecsps import ParameterizedCurveSpc,GenCurve,Peanut, GridFcts
 
 class TransmissionOp(Operator):
     r"""Operator that maps an admissible boundary \partial D onto the corresponding far field pattern. 
@@ -30,7 +30,7 @@ class TransmissionOp(Operator):
         interior and exterior wave number
     rho: complex, optional
         parameter in second transmission condition. Default: 2.
-    N_ieq,inc_waves,R_inc,meas_dir,R_meas,domain: 
+    N_ieq,inc_waves,R_inc,meas,R_meas,domain,codomain: 
         see DiricheletOp
 
     References
@@ -44,11 +44,12 @@ class TransmissionOp(Operator):
                  R_inc:float = np.inf,
                  meas:int |np.ndarray=64, 
                  R_meas:float = np.inf,
-                 domain:ParameterizedCurveSpc|None =None):
+                 domain:ParameterizedCurveSpc|None =None,
+                 codomain:GridFcts|None=None):
 
         self.kappa_ex,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc,\
             self.N_meas, self.meas_pts,self.R_meas,domain,codomain \
-            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,R_inc,meas,R_meas,domain)            
+            = check_scattering_parameters(kappa_ex,N_ieq,inc_waves,R_inc,meas,R_meas,domain,codomain) 
 
         self.kappa_in = kappa_in         
         """Interior wave number."""

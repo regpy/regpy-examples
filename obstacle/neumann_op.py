@@ -7,7 +7,8 @@ from functions.farfield_matrix import farfield_matrix, nearfield_matrix
 from functions.setup_iop_data import setup_iop_data
 from dirichlet_op import check_scattering_parameters, check_create_synthetic_data_params
 from regpy.operators import Operator
-from regpy.vecsps.curve import ParameterizedCurveSpc,GenCurve,Peanut
+from regpy.vecsps import ParameterizedCurveSpc,GenCurve,Peanut,GridFcts
+
 
 class NeumannOp(Operator):
     r"""Operator that maps the shape of a sound-hard obstacle to the far-field measurements. 
@@ -24,7 +25,7 @@ class NeumannOp(Operator):
     where \(u=u^s+u^i\) is the total field and \(D\) is the bounded obstacle in \mathbb{R}^2 with \(\partial D\in\mathcal{C}^2\).
 
     Parameters: 
-    kappa, N_ieq, inc_waves, R_inc, meas_dir,R_meas,domain: see DirichletOp
+    kappa, N_ieq, inc_waves, R_inc, meas_dir,R_meas,domain,codomain: see DirichletOp
  
     References
     ----------
@@ -37,11 +38,12 @@ class NeumannOp(Operator):
                  R_inc: float = np.inf, 
                  meas:  int | list[tuple[float]]=64, 
                  R_meas: float = np.inf,
-                 domain: ParameterizedCurveSpc|None = None):   
+                 domain: ParameterizedCurveSpc|None = None,
+                 codomain: GridFcts|None= None):   
         self.kappa,  self.N_ieq, self.N_inc, self.inc_pts, self.R_inc, \
             self.N_meas, self.meas_pts, self.R_meas, \
             domain, codomain \
-            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain)
+            = check_scattering_parameters(kappa,N_ieq,inc_waves,R_inc,meas,R_meas,domain,codomain)
 
         self.w_sl = -complex(0,1)*self.kappa
         self.w_dl = 1
