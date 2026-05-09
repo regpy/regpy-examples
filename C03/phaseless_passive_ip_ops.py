@@ -177,15 +177,18 @@ class MatrixAutoProductOp(Operator):
                   +self.prod_A_B(dE,     self.prod_As_G(self.E,self.E)))
 
 class CovarianceModGaussian(Operator):
-    """ Operator that takes a complex matrix V as input and yields the covariance operator of the Cox process whose intensity 
+    """ Operator that takes a complex matrix V as input and yields the covariance operator of the process whose intensity 
     is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
     This operator is given explicitly by 
-        V |-> |V^*V|^2 + diag(|Diag (VV^*)|^2)
+        V |-> |V^*V|^2 
     The associated linear mapping might act between tensor space such that V can be a tensor. 
+    The implementation is based on the factorization of the covariance operator as
+    |VV^*|^2 = (Tau(V)) * (Tau(V))^* 
+    shown in [Hohage, Karimi, Müller, 2026, Lemma 5.1] where Tau: C^{shape_rows+shape_cols} -> C^{shape_rows+shape_cols*2} is the operator defined above.
 
     Parameters:
     MatrixSpace: NumPyVectorSpace of the input tensors V
-    StateSpace: NumPyVectorSpace of the outputs 
+    StateSpace: NumPyVectorSpace describing the codomain of V as an operator.
     """
 
     def __init__(self,MatrixSpace,StateSpace):
@@ -226,6 +229,16 @@ class CovarianceModGaussian(Operator):
         return self.derivCov.adjoint_eval(tau)
 
 class CovarianceCoxModGaussian(CovarianceModGaussian):
+    """ Operator that takes a complex matrix V as input and yields the covariance operator of the Coxprocess whose intensity 
+    is given by the squared modulus of the centered circular Gaussian field with covariance operator VV^*. 
+    This operator is given explicitly by 
+        V |-> |V^*V|^2 + (1/T)*diag(\sum_i |V[:,i]|^2)
+
+    Parameters:
+    MatrixSpace: NumPyVectorSpace of the input tensors V
+    StateSpace: NumPyVectorSpace of the codomain of V as an operator.
+    T: positive real number, scaling factor of the second summand, propotional to the exposure time in the application to passive imaging.
+    """    
     def __init__(self,MatrixSpace,StateSpace,T):
         self.Exp = (1/T)*ExpectationCoxModGaussian(MatrixSpace,StateSpace)
         super().__init__(MatrixSpace,StateSpace)
@@ -236,14 +249,14 @@ class CovarianceCoxModGaussian(CovarianceModGaussian):
         else:
             resCox, self.derivCov = self.Cov.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
             resExp, self.derivExp = self.Exp.linearize(tau,differentiate=True,return_adjoint_eval=return_adjoint_eval)
-            sh = resExp.sh
+            sh = resExp.shape
             eye = np.eye(np.prod(sh), dtype=resExp.dtype).reshape(sh + sh)
             # Note that the second summand below is "diag(resExp)"!
             return resCox + eye * resExp.reshape(sh + (1,) * len(sh))
 
     def _derivative(self,tau):
         dExp = self.derivExp(tau)
-        sh = dExp.sh
+        sh = dExp.shape
         eye = np.eye(np.prod(sh), dtype=dExp.dtype).reshape(sh + sh)
         # Again, second term is "diag(dExp)"
         return self.derivCov(tau) + eye*dExp.reshape(sh + (1,) * len(sh))
